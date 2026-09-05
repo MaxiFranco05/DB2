@@ -1,0 +1,5 @@
+Regla 1 (Máquina de estados): En la tabla pedido, crear una restricción (trigger function BEFORE UPDATE) que impida actualizar la columna estado si el valor actual (OLD) es 'CANCELADO' o 'TERMINADO'.
+
+Regla 2 (Catálogo activo): En la tabla detalle_pedido, crear una restricción (trigger function BEFORE INSERT) que impida hacer un INSERT si el producto_id referenciado tiene la columna activo en FALSE dentro de la tabla producto.
+
+Regla 3 (Control de stock): En la tabla detalle_pedido, crear una restricción (trigger function BEFORE INSERT) que verifique en la tabla producto si la cantidad a insertar es mayor al stock actual del producto. Si es mayor, debe abortar la operación lanzando una excepción.
