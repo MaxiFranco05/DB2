@@ -1,7 +1,11 @@
 # FoodStore
-
-Proyecto de base de datos para una tienda de alimentos.
-
+### Proyecto de base de datos para una tienda de alimentos.
+---
+### Miembros:
+##### - Máximo Franco
+##### - Andrés Novello
+##### - Octavio Fiore
+---
 ## Estructura
 
 ```
