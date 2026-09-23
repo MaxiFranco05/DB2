@@ -9,9 +9,22 @@ BEGIN;
 -- -----------------------------------------------------------------
 -- 0. Renombrar trigger existente para control de orden de ejecución
 --    PostgreSQL dispara triggers BEFORE INSERT en orden alfabético.
---    Renombramos a trg_03_... para que corra DESPUÉS de las validaciones.
+--    Reordenamos asegurando idempotencia.
 -- -----------------------------------------------------------------
-ALTER TRIGGER trg_subtotal ON detalle_pedido RENAME TO trg_03_calcular_subtotal;
+
+-- Si ya existe trg_03_calcular_subtotal, eliminamos el trg_subtotal original si quedó pendiente
+DROP TRIGGER IF EXISTS trg_03_calcular_subtotal ON detalle_pedido;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_trigger 
+        WHERE tgname = 'trg_subtotal' 
+          AND tgrelid = 'detalle_pedido'::regclass
+    ) THEN
+        ALTER TRIGGER trg_subtotal ON detalle_pedido RENAME TO trg_03_calcular_subtotal;
+    END IF;
+END $$;
 
 -- ============================================================
 -- REGLA 1: MÁQUINA DE ESTADOS (pedido.estado)
@@ -26,6 +39,8 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_validar_estado_pedido ON pedido;
 
 CREATE TRIGGER trg_validar_estado_pedido
 BEFORE UPDATE OF estado ON pedido
@@ -54,6 +69,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_01_validar_producto_activo ON detalle_pedido;
+
 CREATE TRIGGER trg_01_validar_producto_activo
 BEFORE INSERT ON detalle_pedido
 FOR EACH ROW
@@ -81,6 +98,8 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_02_validar_stock ON detalle_pedido;
 
 CREATE TRIGGER trg_02_validar_stock
 BEFORE INSERT ON detalle_pedido
