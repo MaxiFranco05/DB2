@@ -38,3 +38,15 @@ cp .env.example .env  # then edit with real values
 - `db/schema.sql` — full schema with triggers, indexes, seed data
 - `.env.example` — required env vars template
 - `.gitignore` — excludes .env, backups, node_modules, IDE files
+
+### REGLA DE FORMATO ESTRICTO: DUIA (Declaración de Uso de IA)
+Cuando el usuario solicite generar la "Declaración de Uso de IA" (DUIA), estás OBLIGADO a responder utilizando ÚNICAMENTE una tabla Markdown vertical de dos columnas (`| Campo | Completar |`). Si hay múltiples tareas, debes generar una tabla independiente por cada una.
+Los campos obligatorios en la primera columna (en negrita) son:
+1. **Herramienta**
+2. **Spec o prompt utilizado**
+3. **Qué generó**
+4. **Qué se aceptó**
+5. **Qué se modificó o descartó, y por qué**
+6. **Verificación realizada** (Debe incluir el detalle de la prueba técnica, uso de EXCEPT, y tildes ✅ de aprobación).
+Está terminantemente prohibido generar texto fuera de las tablas.
+La DUIA se crea y edita exclusivamente en /docs/DUIA siguiendo el formato de nombre de los archivos. 
