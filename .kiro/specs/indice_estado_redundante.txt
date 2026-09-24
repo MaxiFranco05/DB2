@@ -1,0 +1,4 @@
+# spec: indice_estado_redundante
+Consulta afectada: SELECT id, fecha, forma_pago FROM pedido WHERE estado = 'TERMINADO';
+Frecuencia: Media/Alta.
+Columnas: estado en la tabla pedido (filtro de igualdad).

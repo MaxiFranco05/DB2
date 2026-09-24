@@ -1,0 +1,4 @@
+# spec: indice_detalle_producto
+Consulta afectada: SELECT dp.producto_id, SUM(dp.cantidad) AS unidades FROM detalle_pedido dp JOIN pedido p ON dp.pedido_id = p.id GROUP BY dp.producto_id;
+Frecuencia: Media. Reporte analítico de ejecución periódica.
+Columnas: producto_id en la tabla detalle_pedido (participa activamente en el JOIN y GROUP BY).   

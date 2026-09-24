@@ -1,0 +1,4 @@
+# spec: indice_pedidos_pendientes
+Consulta afectada: SELECT id, fecha, forma_pago, usuario_id FROM pedido WHERE estado = 'PENDIENTE' AND fecha >= CURRENT_DATE - INTERVAL '7 days' ORDER BY fecha ASC;
+Frecuencia: Alta. Pertenece al camino crítico (ejecutada por un usuario esperando frente a una pantalla).   
+Columnas: estado (filtro de igualdad, baja selectividad), fecha (filtro de rango y ORDER BY, alta selectividad).   
