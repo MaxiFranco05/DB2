@@ -2,6 +2,8 @@
 
 ## Tabla 1 - Ranking de Usuarios
 
+| Campo | Completar |
+| :--- | :--- |
 | **Herramienta** | SQL query generation |
 | **Spec o prompt utilizado** | Ranking histórico de gasto por usuario usando DENSE_RANK(), ignorando pedidos con estado 'CANCELADO' |
 | **Qué generó** | Consulta con Window Function |
@@ -13,6 +15,8 @@
 
 ## Tabla 2 - Precio Máximo por Categoría
 
+| Campo | Completar |
+| :--- | :--- |
 | **Herramienta** | SQL query generation |
 | **Spec o prompt utilizado** | Búsqueda del precio máximo de productos activos por categoría usando una subconsulta correlacionada en el SELECT, prohibido usar JOINs |
 | **Qué generó** | Consulta con subconsulta en el SELECT |

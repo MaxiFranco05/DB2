@@ -1,5 +1,7 @@
 # DUIA - Parte 1: Generación Masiva de Datos de Prueba (Semana 3)
 
+| Campo | Completar |
+| :--- | :--- |
 | **Herramienta** | Generación de script SQL transaccional PostgreSQL (OpenCode) |
 | **Spec o prompt utilizado** | "Generar script SQL transaccional para PostgreSQL que inserte datos masivos de prueba usando generate_series: Tabla producto 50K filas, precio aleatorio 500-5000, stock 0-200, categoria_id aleatorio existente; Tabla usuario 20K filas, correos únicos (userN@test.com), contraseña genérica; Tabla pedido 200K filas, estados y formas de pago aleatorios basados en ENUMs, usuarios aleatorios; Tabla detalle_pedido ≥1 detalle por pedido, manejando conflictos de PK compuesta; Restricciones: Sin funciones PL/pgSQL, todo dentro de BEGIN/COMMIT, seguido de ANALYZE en las 4 tablas" |
 | **Qué generó** | Script base usando generate_series para todas las inserciones masivas, RANDOM() para valores aleatorios (precio, stock, IDs), CASE expressions para valores ENUM (estado_pedido, forma_pago), subquery SELECT id FROM categoria ORDER BY random() LIMIT 1 para categoria_id aleatorio, DISTINCT ON + ON CONFLICT DO NOTHING para detalle_pedido, ANALYZE final en las 4 tablas |

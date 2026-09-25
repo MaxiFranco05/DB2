@@ -1,5 +1,7 @@
 # DUIA - Parte 2: Creación de Índices de Optimización (Semana 3)
 
+| Campo | Completar |
+| :--- | :--- |
 | **Herramienta** | Generación de script SQL transaccional PostgreSQL para índices (OpenCode) |
 | **Spec o prompt utilizado** | "Crear script db/indices.sql que consolide los 3 índices necesarios para optimizar escaneos secuenciales en Food Store. Dos índices ya existían en db/schema.sql; el tercero (parcial) es nuevo. Evaluar opciones: A) Agregar a schema.sql, B) Agregar a restricciones.sql, C) Crear db/indices.sql dedicado. Justificar decisión." |
 | **Qué generó** | Script db/indices.sql idempotente con BEGIN/COMMIT: 1) idx_producto_categoria (ya en schema.sql) ON producto(categoria_id); 2) idx_pedido_usuario (ya en schema.sql) ON pedido(usuario_id); 3) idx_producto_precio_activo (NUEVO - índice parcial) ON producto(precio) WHERE activo = true. Decisión arquitectura: Opción C elegida - archivo dedicado a performance por separación de preocupaciones, versionable, re-ejecutable. Principio Single Responsibility: schema = DDL base, restricciones = lógica negocio, indices = performance. Idempotencia con CREATE INDEX IF NOT EXISTS. |
