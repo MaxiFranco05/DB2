@@ -2,12 +2,23 @@
 
 ## 1. Objetivo del diseño
 
-Este documento describe la arquitectura de seguridad del sistema de roles de la base de datos `foodstore`. El diseño aplica el principio de mínimo privilegio mediante una separación en dos capas:
+Este documento describe la arquitectura de seguridad del sistema de roles de la base de datos `foodstore` (`food_store` / `food_store_copia`), elaborada por Máximo, Andrés y Octavio. El diseño aplica el principio de mínimo privilegio mediante una separación en dos capas:
 
 1. **Roles de grupo** (sin login): encapsulan conjuntos cohesivos de permisos.
 2. **Roles de login**: representan identidades de conexión reales que heredan uno o más roles de grupo.
 
 Este esquema permite modificar los permisos de un perfil funcional en un único lugar (el rol de grupo) sin afectar a los usuarios de conexión.
+
+### 1.1 Justificación sintética de cada rol (Principio de Mínimo Privilegio)
+
+| Rol | Tipo | Justificación en una oración (qué operación habilita y por qué esa y no otra) |
+| :--- | :---: | :--- |
+| **`rol_app_lectura`** | Grupo (`NOLOGIN`) | Habilita únicamente `SELECT` sobre las tablas operativas actuales y futuras (`ALTER DEFAULT PRIVILEGES`) porque la visualización de menús y pedidos solo requiere lectura y jamás escritura o borrado. |
+| **`rol_app_escritura`** | Grupo (`NOLOGIN`) | Habilita `INSERT` en `pedido`/`detalle_pedido`/`auditoria`, `UPDATE` puntual en `producto(stock)` y `pedido(estado)`, `DELETE` en `detalle_pedido` y ejecución de `fn_autenticar`/`fn_resetear_password` porque el flujo de compra solo debe afectar transacciones e inventario sin tocar precios ni la tabla `usuario`. |
+| **`rol_soporte`** | Grupo (`NOLOGIN`) | Habilita `SELECT` a nivel de columna sobre `usuario(id, mail)` y lectura de `pedido` y `detalle_pedido` porque atención al cliente necesita localizar los pedidos de un correo sin ver `contrasena`, `celular`, `nombre` ni `apellido`. |
+| **`rol_reportes`** | Grupo (`NOLOGIN`) | Habilita exclusivamente `SELECT` sobre vistas agregadas (`v_ventas_por_categoria`) porque el área de analítica requiere indicadores resumidos sin acceso a filas individuales ni tablas operativas. |
+| **`app_web`** | Login (`LOGIN`) | Habilita la autenticación de la aplicación heredando únicamente `rol_app_lectura` y `rol_app_escritura` (`NOSUPERUSER NOCREATEROLE NOCREATEDB`) porque el backend debe operar sobre datos de negocio sin poder alterar estructuras DDL ni escalar privilegios. |
+| **`admin_datos`** | Login (`LOGIN`) | Habilita `ALL PRIVILEGES` sobre objetos del esquema `public` y `CREATEROLE` (sin `SUPERUSER` ni `CREATEDB`) porque el DBA requiere administrar el esquema, roles y auditoría sin poseer control irrestricto sobre el sistema operativo del motor. |
 
 ---
 

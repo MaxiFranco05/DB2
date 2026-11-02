@@ -2,9 +2,18 @@
 
 ## Introduction
 
-Este documento especifica los requisitos funcionales y de seguridad del modelo de roles y permisos para la base de datos `foodstore`. El sistema aplica el principio de mínimo privilegio: cada rol recibe únicamente los permisos imprescindibles para cumplir su función.
+Este documento especifica los requisitos funcionales y de seguridad del modelo de roles y permisos para la base de datos `foodstore` (`food_store` / `food_store_copia`), consensuado por el equipo (Máximo, Andrés y Octavio). El sistema aplica el principio de mínimo privilegio: cada rol recibe únicamente los permisos imprescindibles para cumplir su función.
 
-El esquema `public` de la base `foodstore` contiene las tablas operativas `categoria`, `producto`, `pedido`, `detalle_pedido` y `usuario`. El modelo distingue dos capas: roles de grupo (sin login) que encapsulan conjuntos cohesivos de permisos, y roles de login que heredan uno o más roles de grupo y representan identidades de conexión reales.
+El esquema `public` de la base `foodstore` contiene las tablas operativas `categoria`, `producto`, `pedido`, `detalle_pedido` y `usuario` (además de la tabla de soporte `auditoria` y vistas agregadas). El modelo distingue dos capas: roles de grupo (sin login) que encapsulan conjuntos cohesivos de permisos, y roles de login que heredan uno o más roles de grupo y representan identidades de conexión reales.
+
+### Síntesis de justificación de mínimo privilegio por rol (en una oración)
+
+- **`rol_app_lectura` (grupo):** Habilita únicamente `SELECT` sobre las tablas operativas (y tablas futuras mediante `ALTER DEFAULT PRIVILEGES`) porque la capa de presentación necesita consultar el catálogo y el estado de los pedidos sin capacidad de alterar ni eliminar ningún registro.
+- **`rol_app_escritura` (grupo):** Habilita exclusivamente `INSERT` en `pedido`/`detalle_pedido` (y `auditoria`), `UPDATE` acotado a `producto(stock)` y `pedido(estado)`, `DELETE` en `detalle_pedido` y `EXECUTE` sobre `fn_autenticar`/`fn_resetear_password` porque la operatoria transaccional requiere registrar ventas y actualizar inventario sin poder modificar precios, catálogos ni datos directos de `usuario`.
+- **`rol_soporte` (grupo):** Habilita únicamente `SELECT` sobre las columnas `id` y `mail` de `usuario` y lectura sobre `pedido` y `detalle_pedido` porque la mesa de ayuda necesita vincular el reclamo de un cliente con sus órdenes sin exponerse a contraseñas, teléfonos ni datos filiatorios completos.
+- **`rol_reportes` (grupo):** Habilita exclusivamente `SELECT` sobre vistas agregadas de negocio (`v_ventas_por_categoria`) porque el análisis estadístico requiere métricas consolidadas y nunca acceso directo a filas transaccionales crudas ni datos personales.
+- **`app_web` (login):** Habilita la conexión (`CONNECT`) del backend heredando `rol_app_lectura` y `rol_app_escritura` sin atributos administrativos (`NOSUPERUSER NOCREATEROLE NOCREATEDB`) porque la aplicación necesita operar lecturas y escrituras del giro comercial sin privilegios de gestión sobre el motor ni sobre otros roles.
+- **`admin_datos` (login):** Habilita el control total (`ALL PRIVILEGES` sobre tablas, secuencias y funciones del esquema `public` más `CREATEROLE` y `ALTER DEFAULT PRIVILEGES`) sin llegar a `SUPERUSER` porque el administrador de datos necesita ejecutar migraciones, gestionar roles y auditar el esquema manteniendo acotado el riesgo a nivel de instancia.
 
 ## Glossary
 
