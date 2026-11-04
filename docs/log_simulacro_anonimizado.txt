@@ -1,0 +1,19 @@
+2026-11-02 19:52:15 -03 [11476] [desconocido]@[desconocido] ::1 LOG:  conexión recibida: host=::1 port=52756
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 LOG:  conexión autenticada: usuario=«app_web» método=trust (RUTA_CONFIG_ANONIMIZADA/pg_hba.conf:117)
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 LOG:  conexión autorizada: usuario=app_web base_de_datos=food_store_copia nombre_de_aplicación=psql
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 WARNING:  Fallo de autenticación para el correo: usr_anon_00001@foodstore.anon
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 CONTEXTO:  función PL/pgSQL fn_autenticar(character varying,character varying) en la línea 20 en RAISE
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 WARNING:  Fallo de autenticación para el correo: usr_anon_00001@foodstore.anon
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 CONTEXTO:  función PL/pgSQL fn_autenticar(character varying,character varying) en la línea 20 en RAISE
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 WARNING:  Fallo de autenticación para el correo: usr_anon_00001@foodstore.anon
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 CONTEXTO:  función PL/pgSQL fn_autenticar(character varying,character varying) en la línea 20 en RAISE
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 WARNING:  Fallo de autenticación para el correo: usr_anon_00001@foodstore.anon
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 CONTEXTO:  función PL/pgSQL fn_autenticar(character varying,character varying) en la línea 20 en RAISE
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 LOG:  sentencia: GRANT admin_datos TO rol_soporte;
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 ERROR:  se ha denegado el permiso para otorgar el rol «admin_datos»
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 DETALLE:  Sólo los roles con la opción ADMIN en el rol «admin_datos» pueden otorgar este rol.
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 SENTENCIA:  GRANT admin_datos TO rol_soporte;
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 LOG:  sentencia: DROP TABLE auditoria;
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 ERROR:  debe ser dueño de la tabla auditoria
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 SENTENCIA:  DROP TABLE auditoria;
+2026-11-02 19:52:15 -03 [11476] app_web@food_store_copia ::1 LOG:  desconexión: duración de sesión: 0:00:00.066 usuario=app_web base=food_store_copia host=::1 port=52756

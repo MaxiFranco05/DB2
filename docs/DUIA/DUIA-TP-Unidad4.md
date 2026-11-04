@@ -1,0 +1,17 @@
+| Campo | Completar |
+| :--- | :--- |
+| **Herramienta** | Gemini (Google) |
+| **Spec o prompt utilizado** | *"Análisis formal de FNBC sobre la tabla `control_lote_almacen`, cálculo de clausuras, prueba de Teorema de Heath y generación de script SQL `tp_fnbc_control_lote.sql` con vistas de compatibilidad y verificación por `EXCEPT`."* |
+| **Qué generó** | - Análisis teórico completo de dependencias funcionales $DF_1$ y $DF_2$.<br>- Cálculo de clausuras de subconjuntos de atributos, identificación de claves candidatas y clasificación de atributos primos.<br>- Demostración de violación de FNBC por $DF_2$.<br>- Algoritmo de descomposición sin pérdida en dos esquemas (`responsable_deposito` y `control_lote`).<br>- Demostración del Teorema de Heath y script DDL/DML con migración, vista de compatibilidad y consulta de prueba con `EXCEPT`. |
+| **Qué se aceptó** | Se aceptó en su totalidad la demostración teórica, el cálculo de clausuras, la estructuración de las tablas descompuestas y el mecanismo de verificación de equivalencia mediante `EXCEPT`. |
+| **Qué se modificó o descartó, y por qué** | Se ajustó la sentencia de inserción inicial para asegurar la compatibilidad estricta con las restricciones de clave foránea en PostgreSQL (`ON CONFLICT DO NOTHING`) y el manejo explícito de valores generados en la tabla `usuario`. |
+| **Verificación realizada** | ✅ Ejecución exitosa del script `tp_fnbc_control_lote.sql` en PostgreSQL.<br>✅ Prueba de reconstrucción mediante la vista `v_control_lote_almacen` retornando exactamente las 3 filas originales.<br>✅ Ejecución de prueba con `EXCEPT` bidireccional entre la tabla original y la vista de compatibilidad, retornando 0 filas (diferencia nula). |
+
+| Campo | Completar |
+| :--- | :--- |
+| **Herramienta** | Gemini (Google) |
+| **Spec o prompt utilizado** | *"Análisis de performance con `EXPLAIN ANALYZE` sobre consulta de ventas por categoría, patrón de desnormalización controlada mediante tabla resumen precalculada y Trigger de sincronización atómica en `tp_desnormalizacion_top_categorias.sql`."* |
+| **Qué generó** | - Diagnóstico de bottlenecks en la consulta original (`Seq Scan` y filtros dinámicos por expresión de fecha).<br>- Propuesta e implementación del patrón de tabla resumen precalculada (`ventas_diarias_categoria`) con índice compuesto sobre `(fecha, total_vendido DESC)`.<br>- Función `fn_sincronizar_ventas_diarias()` y Trigger `trg_actualizar_ventas_categoria` para mantener la consistencia en `INSERT`, `UPDATE` y `DELETE`.<br>- Script de auditoría de consistencia con `FULL OUTER JOIN`. |
+| **Qué se aceptó** | Se aceptó la arquitectura de la tabla desnormalizada, la lógica de actualización atómica mediante Trigger con `ON CONFLICT DO UPDATE` y la estrategia de auditoría. |
+| **Qué se modificó o descartó, y por qué** | Se removió la condición `eliminado = FALSE` de las cláusulas de la consulta modelo para adherir con precisión al esquema canónico `schema.sql` de Food Store, donde las tablas `pedido` y `detalle_pedido` no utilizan borrado lógico. |
+| **Verificación realizada** | ✅ Ejecución de `EXPLAIN ANALYZE` previa (`148.210 ms`) y posterior (`0.047 ms`), confirmando una aceleración significativa.<br>✅ Prueba de inserción, actualización y borrado en `detalle_pedido` verificando sincronía automática en `ventas_diarias_categoria`.<br>✅ Ejecución del script de auditoría mediante `FULL OUTER JOIN`, obteniendo 0 filas con discrepancia (diferencia > $0.01$). |
