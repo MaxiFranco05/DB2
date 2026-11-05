@@ -1,7 +1,7 @@
 id,nombre,precio_centavos,stock,disponible,eliminado
-1,Producto 1,421451,184,t,f
+1,Producto 1,450000,184,t,f
 2,Producto 2,76689,36,t,f
-3,Producto 3,328926,199,t,f
+3,Producto 3,328926,199,f,t
 4,Producto 4,63036,154,t,f
 5,Producto 5,260769,0,f,f
 6,Producto 6,377275,93,t,f
