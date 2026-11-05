@@ -32,6 +32,7 @@ cp .env.example .env  # then edit with real values
 ## Conventions
 - Schema changes: edit `db/schema.sql`, then re-apply or create migration
 - Never commit real credentials (`.env` is gitignored)
+- **Never commit or push without explicit authorization** — all `git add`, `git commit`, and `git push` operations must be approved and confirmed by the user first. No automated or unilateral git operations are permitted.
 - Backups go to `db/backups/` (gitignored)
 
 ## Key Files to Know

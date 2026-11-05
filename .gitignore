@@ -10,6 +10,9 @@ vendor/
 # Database
 db/backups/*.dump
 db/backups/*.sql
+backups/*.dump
+backups/*.sql
+backups/
 
 # IDE
 .vscode/

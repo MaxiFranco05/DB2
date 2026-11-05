@@ -38,3 +38,44 @@ El equipo revisó el historial de commits del repositorio (`git log --oneline`) 
 4. `feat(u5-parte-c): ejecutar simulacro de incidente, anonimizar log y documentar lectura critica` — Script `sql/simulacro_incidente.sql`, log anonimizado `docs/log_simulacro_anonimizado.txt` e informe crítico `docs/informe_incidente.md`.
 5. `feat(u5-parte-d): implementar anonimizacion determinista en usuario_anon y verificar equivalencia agregada` — Script `sql/usuario_anon.sql` y verificación lado a lado + `EXCEPT` en `docs/verificacion_equivalencia.md`.
 6. `docs(u5-parte-e): consolidar BITACORA.md, DUIA y analisis critico final del proceso` — Cierre y consolidación de la bitácora de uso de IA.
+
+
+---
+
+# Bitácora de Uso de Inteligencia Artificial — Trabajo Práctico Unidad 6
+
+**Asignatura:** Base de Datos II — Tecnicatura Universitaria en Programación  
+**Proyecto:** Food Store (Mantenimiento, Respaldo y Recuperación ante Desastres)  
+**Integrantes:** Máximo, Andrés y Octavio  
+**Herramientas utilizadas:** Kiro (especificación SDD), OpenCode (asistente de IA de terminal), Subagente Auditor de QA y PowerShell/PostgreSQL 17+  
+
+---
+
+## 1. Registro de interacciones y validación crítica (Formato Cátedra + Estándar DUIA)
+
+| Prompt enviado a la IA | Respuesta relevante recibida | Validación o corrección humana aplicada |
+| :--- | :--- | :--- |
+| **[Parte 1 y 2 — Especificación y Script de Backup]**<br>*"En base a SPEC_U6.md y las reglas de AGENTS.md, generar el script de PowerShell 'backup_foodstore.ps1' para automatizar el respaldo de 'foodstore' en Windows en formato custom (-Fc), con timestamp en nombre, logs en 'logs/', control de fallos con `$LASTEXITCODE` y sin contraseñas hardcodeadas."* | La IA propuso un script base invocando `pg_dump -Fc` con redirección a un archivo de dump y generación de log. Inicialmente empleó interpolación de expresiones anidadas con comillas y caracteres UTF-8 especiales, y difería la lectura de `$LASTEXITCODE` después de varias salidas por consola. | **Qué se aceptó:** La nomenclatura temporal `foodstore_yyyyMMdd_HHmmss.dump`, el uso del formato binario comprimido (`-Fc`), la creación dinámica de carpetas `backups/` y `logs/` y la parametrización de host, puerto y usuario.<br><br>**Qué se modificó o descartó, y por qué:**<br>1. **Fijación inmediata de `$LASTEXITCODE`:** Se corrigió para almacenar `$dumpExitCode = $LASTEXITCODE` en la línea consecutiva a `pg_dump`, evitando que cmdlets intermedios reseteen el código del motor.<br>2. **Validación de tamaño > 0 bytes:** Se incorporó un guardián que valida que el archivo no quede vacío.<br>3. **Codificación:** Se normalizó a caracteres ASCII para evitar fallos de parser en PowerShell 5.1.<br><br>**Verificación realizada:**<br>✅ Ejecución exitosa de `backup_foodstore.ps1` generando el respaldo `foodstore_20261104_164552.dump` (3,94 MB) en **1,33 segundos**.<br>✅ Inspección de catálogo mediante `pg_restore -l` confirmando 58 entradas TOC íntegras.<br>✅ Log auditado en `logs/backup_20261104_164552.log` con código 0. |
+| **[Parte 3 — Monitoreo y Mantenimiento Seguro]**<br>*"Siguiendo SPEC_U6.md, generar 'sql/health_check.sql' con 4 controles de monitoreo y 'sql/maintenance.sql' con diagnóstico previo y una acción de mantenimiento segura y justificada."* | La IA generó las 4 consultas de salud (`pg_size_pretty`, conexiones/commits en `pg_stat_database`, tuplas muertas en `pg_stat_user_tables` y queries activas en `pg_stat_activity`). Sin embargo, en `sql/maintenance.sql` propuso inicialmente la opción de ejecutar `VACUUM FULL` sobre las tablas con tuplas muertas para recuperar espacio físico. | **Qué se aceptó:** La estructura completa de `health_check.sql` con mensajes descriptivos vía `\echo` y encabezados legibles.<br><br>**Qué se modificó o descartó, y por qué (Rechazo de `VACUUM FULL`):**<br>1. **Rechazo tajante de `VACUUM FULL`:** El equipo (**Máximo, Andrés y Octavio**) rechazó la propuesta de `VACUUM FULL`. Este comando toma `AccessExclusiveLock`, impidiendo lecturas (`SELECT`) y escrituras concurrentes, causando una caída total de servicio (*downtime*) inadmisible en una aplicación transaccional activa.<br>2. **Adopción de `VACUUM ANALYZE` no bloqueante:** Se implementó `VACUUM ANALYZE` concurrente (`ShareUpdateExclusiveLock`), que purga espacio para el mapa de espacio libre (FSM) y actualiza `pg_statistic` permitiendo que el sistema siga operando.<br><br>**Verificación realizada:**<br>✅ Ejecución de `sql/health_check.sql` (155 MB de BD, 0 bloqueos).<br>✅ Ejecución de `sql/maintenance.sql` actualizando `last_vacuum` y `last_analyze` sobre los 891.992 registros de las tablas operativas.<br>✅ Verificación en catálogo confirmando 0 bloqueos exclusivos. |
+| **[Parte 4 — Simulacro de Desastre Contra Reloj]**<br>*"Generar el script 'restore_test.ps1' para automatizar el simulacro de recuperación ante desastres en 'foodstore_restore_test', midiendo el RTO con cronómetro de alta precisión, calculando el RPO observado y corriendo las validaciones mínimas de cardinalidad e integridad."* | La IA generó un borrador con `createdb`, `pg_restore` y las consultas de validación. La versión inicial no calculaba la antigüedad de la copia para el RPO, no incluía flags de portabilidad en `pg_restore` y fallaba en PowerShell por el uso de caracteres tipográficos especiales (em-dash `—`). | **Qué se aceptó:** La lógica de automatización completa, las consultas de validación de filas y los filtros de dominio (`precio < 0 OR stock < 0`, `cantidad <= 0 OR precio_unitario < 0`).<br><br>**Qué se modificó o descartó, y por qué:**<br>1. **Resolución del error de codificación ANSI en PowerShell 5.1:** El byte `0x94` del guion largo UTF-8 era interpretado como comilla doble `”` en Windows-1252. Se normalizó la sintaxis a ASCII plano y se verificó el parseo.<br>2. **Flags `--no-owner --no-privileges`:** Se forzaron en `pg_restore` para asegurar portabilidad entre distintos roles.<br>3. **Medición rigurosa de RTO y RPO:** Se instrumentó `[System.Diagnostics.Stopwatch]` y cálculo de diferencia temporal.<br>4. **Vista de compatibilidad `cliente`:** Se creó la vista arquitectónica para compatibilizar la consulta del TP con la tabla `usuario`.<br><br>**Verificación realizada:**<br>✅ Ejecución de `restore_test.ps1` restaurando íntegramente `foodstore_restore_test`.<br>✅ RTO cronometrado: **6,95 segundos** (frente al objetivo de < 300 s).<br>✅ RPO observado: **332,3 segundos (~5,54 min)**.<br>✅ Validaciones: 0 productos inválidos, 0 detalles inválidos y coincidencia del 100% en las 891.992 filas. |
+
+---
+
+## 2. Análisis del Caso Más Significativo de Error o Imprecisión de la IA (Unidad 6)
+
+El caso más significativo y conceptualmente riesgoso fue la **sugerencia de incorporar `VACUUM FULL` dentro de los scripts de mantenimiento periódico**. 
+
+**Explicación técnica de la falla y decisión humana:**  
+`VACUUM FULL` reconstruye la tabla completa en un nuevo archivo físico de disco. Para ello, PostgreSQL exige un bloqueo de tipo `AccessExclusiveLock`. Bajo este nivel de aislamiento, ninguna otra transacción puede siquiera consultar la tabla (`SELECT` queda encolado esperando la liberación del cerrojo). Para una plataforma de comidas rápidas con miles de pedidos diarios, una rutina automática que lance un `VACUUM FULL` provocaría un *freeze* o *timeout* generalizado en la aplicación web y caja, traduciéndose en pérdida inmediata de ventas. El equipo humano descartó de plano esa vía y la reemplazó por la combinación virtuosa de `autovacuum` afinado + `VACUUM ANALYZE` concurrente no bloqueante.
+
+---
+
+## 3. Resumen de Entregables Generados y Validados
+
+1. `SPEC_U6.md`: Especificación formal ejecutiva (1 página).
+2. `backup_foodstore.ps1`: Script de respaldo automatizado en formato `-Fc`.
+3. `sql/health_check.sql`: 4 controles de diagnóstico y monitoreo.
+4. `sql/maintenance.sql`: Mantenimiento seguro sin bloqueos exclusivos.
+5. `restore_test.ps1`: Automatización del simulacro contra reloj y cálculo de RTO/RPO.
+6. `informe_u6.pdf` (y `docs/informe_u6.md` / `.html`): Reporte post-incidente consolidado.
+7. `docs/DUIA/DUIA-TP-Unidad6.md`: Declaración estricta de uso de IA con tabla vertical de 6 campos.
