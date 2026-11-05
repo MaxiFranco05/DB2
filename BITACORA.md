@@ -70,12 +70,40 @@ El caso más significativo y conceptualmente riesgoso fue la **sugerencia de inc
 
 ---
 
+# Bitácora de Uso de Inteligencia Artificial — Trabajo Práctico Unidad 7
+
+**Asignatura:** Base de Datos II — Tecnicatura Universitaria en Programación  
+**Proyecto:** Food Store (NoSQL y Nuevas Formas de Almacenamiento: Modelado y Migración a MongoDB)  
+**Integrantes:** Máximo Franco, Andrés Novello y Octavio Fiore  
+**Repositorio:** https://github.com/MaxiFranco05/DB2  
+**Herramientas utilizadas:** Kiro (especificación SDD), Antigravity (asistente de IA de código, reemplazo de OpenCode), MongoDB Shell (`mongosh`) y PostgreSQL 17+  
+
+---
+
+## 1. Registro de interacciones y validación crítica (Formato Cátedra + Estándar DUIA)
+
+| Prompt enviado a la IA | Respuesta relevante recibida | Validación o corrección humana aplicada |
+| :--- | :--- | :--- |
+| **[Parte 1 — Especificación SDD y Modelado BSON]**<br>*"Generar el documento técnico `SPEC_U7.md` para migrar el subconjunto de pedidos y detalle de pedidos de Food Store a MongoDB, definiendo mapeo de entidades, justificación de embedding vs referencing, reglas de integridad RI-M1 y RI-M2, y prompts para la IA ejecutora."* | Kiro generó la especificación formal cubriendo los 5 pedidos de muestra (IDs `756504` a `756508`), el mapeo de tablas relacionales a la colección `pedidos`, el esquema JSON/BSON con `items[]` embebidos y objeto `cliente`, y las 2 reglas de integridad críticas. Inicialmente sugería tratar el `_id` de MongoDB como único identificador sin conservar la clave foránea relacional de cliente ni el ID de origen. | **Qué se aceptó:** La estructura del esquema BSON en 3 niveles, la justificación de *embedding* por el principio de "datos accedidos juntos se almacenan juntos" y la formulación matemática de RI-M1 (`subtotal = cantidad * precio_unitario`, `total = sum(subtotal)`).<br><br>**Qué se modificó o descartó, y por qué:**<br>1. **Preservación de IDs relacionales:** Se exigió mantener `pedido_id_origen` y `usuario_id_origen` para permitir la auditoría cruzada con PostgreSQL.<br>2. **Exclusión estricta de credenciales:** Se eliminó explícitamente el campo `contrasena` del cliente embebido por cumplimiento de protección de datos personales.<br>3. **Calibración del umbral:** Se estableció $15.000 para Q-M4 para lograr una segmentación balanceada.<br><br>**Verificación realizada:**<br>✅ Validación del modelo contra el dump de producción.<br>✅ Comprobación de que `SPEC_U7.md` no contiene sentencias abiertas `SELECT *`.<br>✅ Verificación matemática de la muestra previa a la migración (0 diferencias). |
+| **[Parte 2 — Implementación de Migración y Consultas MongoDB]**<br>*"En base a SPEC_U7.md sección 6.1, generar `consultas_mongodb.js` con inicialización idempotente insertMany de los 5 pedidos y las 4 consultas documentales con .toArray() y proyecciones explícitas."* | Antigravity generó el script en JavaScript para `mongosh` con la inserción de los 5 documentos de la muestra, precios históricos congelados y las consultas Q-M1 a Q-M4. La consulta Q-M3 proyectaba inicialmente todo el array de items en vez de usar la proyección posicional del ítem coincidente. | **Qué se aceptó:** La inserción de los 5 documentos con tipos de datos correctos (`ISODate`, números decimales), el cálculo de totales y las consultas Q-M1, Q-M2 y Q-M4.<br><br>**Qué se modificó o descartó, y por qué:**<br>1. **Proyección posicional en Q-M3:** Se ajustó la proyección a `{"items.$": 1}` para devolver únicamente el ítem del producto auditado (`243882`) y no todos los productos del pedido.<br>2. **Idempotencia:** Se añadió un bloque inicial `deleteMany` para garantizar que el script se pueda reejecutar limpiamente sin duplicados.<br>3. **Bloque de aserciones de integridad:** Se incorporaron validaciones de agregación para comprobar RI-M1 y RI-M2 en tiempo de ejecución.<br><br>**Verificación realizada:**<br>✅ Ejecución exitosa del script en entorno de prueba retornando: 5 pedidos en Q-M1, 2 pedidos en Q-M2 (`[756505, 756508]`), 4 pedidos en Q-M3 (`[756505, 756506, 756507, 756508]`) y 3 pedidos en Q-M4.<br>✅ Verificación RI-M1: 0 discrepancias de sumatoria.<br>✅ Verificación RI-M2: 0 pedidos con ítems vacíos o nulos. |
+| **[Parte 3 — Consultas Equivalentes en PostgreSQL y Matriz de Paridad]**<br>*"En base a SPEC_U7.md sección 6.2, generar `consultas_postgresql.sql` con las consultas relacionales equivalentes Q-PG1 y Q-PG2 con encabezados \echo y sin SELECT *."* | Antigravity generó el script SQL con los `JOIN` y agregaciones requeridas para pedidos `CONFIRMADO` y con producto `243882`. Propuso inicialmente una consulta amplia que no filtraba por la muestra piloto. | **Qué se aceptó:** El uso de `SUM(dp.subtotal)` agrupado por `p.id, p.estado, p.fecha` y el `SELECT DISTINCT` con datos detallados de la línea.<br><br>**Qué se modificó o descartó, y por qué:**<br>1. **Acotamiento estricto a la muestra:** Se restringió `p.id IN (756504, 756505, 756506, 756507, 756508)` para asegurar la comparabilidad simétrica contra los documentos migrados a MongoDB.<br>2. **Cero `SELECT *` y trazabilidad:** Se nombraron explícitamente todas las columnas de salida.<br><br>**Verificación realizada:**<br>✅ Validación con EXCEPT bidireccional entre los IDs de PostgreSQL y MongoDB para Q-PG1/Q-M2 arrojando 0 filas de diferencia (IDs `[756505, 756508]`).<br>✅ Validación con EXCEPT bidireccional para Q-PG2/Q-M3 arrojando 0 filas de diferencia (IDs `[756505, 756506, 756507, 756508]`).<br>✅ Verificación de paridad de precios históricos congelados ($3628.43 para el producto 243882 en ambos motores). |
+
+---
+
+## 2. Análisis del Caso Más Significativo de Error o Imprecisión de la IA (Unidad 7)
+
+Entre las propuestas generadas por las herramientas de IA, el caso más significativo fue la **afirmación común de que *"el embedding en MongoDB duplica datos y desperdicia almacenamiento de forma ineficiente"*** y la **propuesta inicial de consultar el precio actual de la tabla `producto` al momento de poblar el documento**.
+
+**Explicación técnica de la falla y decisión humana:**  
+Si el script de migración hubiese recalculado los subtotales consultando el precio actual de `producto` en lugar de leer el valor congelado en `detalle_pedido.precio_unitario` (garantizado en PostgreSQL por el trigger `trg_subtotal`), se habría violado la regla de integridad histórica **RI-M1**. En una base de datos operativa, los precios de catálogo cambian continuamente; alterar los importes de un pedido cerrado del año pasado provocaría inconsistencias fiscales y distorsión contable. El equipo humano (**Máximo Franco, Andrés Novello y Octavio Fiore**) impuso la regla de que el embedding de `precio_unitario_historico` no es redundancia injustificada, sino una necesidad de negocio para inmortalizar el estado de la transacción.
+
+---
+
 ## 3. Resumen de Entregables Generados y Validados
 
-1. `SPEC_U6.md`: Especificación formal ejecutiva (1 página).
-2. `backup_foodstore.ps1`: Script de respaldo automatizado en formato `-Fc`.
-3. `sql/health_check.sql`: 4 controles de diagnóstico y monitoreo.
-4. `sql/maintenance.sql`: Mantenimiento seguro sin bloqueos exclusivos.
-5. `restore_test.ps1`: Automatización del simulacro contra reloj y cálculo de RTO/RPO.
-6. `informe_u6.pdf` (y `docs/informe_u6.md` / `.html`): Reporte post-incidente consolidado.
-7. `docs/DUIA/DUIA-TP-Unidad6.md`: Declaración estricta de uso de IA con tabla vertical de 6 campos.
+1. `SPEC_U7.md`: Especificación formal de arquitectura SDD para migración a MongoDB.
+2. `consultas_mongodb.js`: Script de migración `insertMany` y las 4 consultas documentales con `.toArray()` y chequeos RI-M1/RI-M2.
+3. `consultas_postgresql.sql`: Script con consultas relacionales equivalentes sin `SELECT *` y con `\echo`.
+4. `docs/DUIA/DUIA-TP-Unidad7.md`: Declaración de Uso de IA en formato tabular estricto de dos columnas.
+5. `docs/informe_u7.md`: Informe técnico final consolidado de 5 páginas.
+
