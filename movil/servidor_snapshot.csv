@@ -1,0 +1,21 @@
+id,nombre,precio_centavos,stock,disponible,eliminado
+1,Producto 1,421451,184,t,f
+2,Producto 2,76689,36,t,f
+3,Producto 3,328926,199,t,f
+4,Producto 4,63036,154,t,f
+5,Producto 5,260769,0,f,f
+6,Producto 6,377275,93,t,f
+7,Producto 7,164214,139,t,f
+8,Producto 8,363388,48,t,f
+9,Producto 9,72420,42,t,f
+10,Producto 10,168987,71,t,f
+11,Producto 11,458823,59,t,f
+12,Producto 12,425601,160,t,f
+13,Producto 13,244307,17,t,f
+14,Producto 14,423499,193,t,f
+15,Producto 15,465883,181,t,f
+16,Producto 16,239687,104,t,f
+17,Producto 17,170353,195,t,f
+18,Producto 18,205229,28,t,f
+19,Producto 19,430713,131,t,f
+20,Producto 20,461844,151,t,f
