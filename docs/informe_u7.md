@@ -98,43 +98,50 @@ Se seleccionó **embedding completo** de cliente e ítems por sobre la separaci�
 
 ## 3. Parte 2 · Consultas y Verificación (Consignas 4 y 5)
 
-### 3.1. Consultas Ejecutadas en MongoDB (Consigna 4)
+### 3.1. Evidencias de Ejecución en MongoDB (Consigna 4)
+Las 4 consultas fueron implementadas en `consultas_mongodb.js` y ejecutadas en el entorno interactivo de `mongosh` con proyecciones explícitas:
 
-#### Q-M1: Mostrar todos los pedidos, incluyendo identificador y estado
+#### Q-M1: Listar todos los pedidos (identificador y estado)
 ```javascript
-db.pedidos.find({}, { pedido_id_origen: 1, estado: 1, _id: 0 }).sort({ pedido_id_origen: 1 });
+foodstore_nosql> db.pedidos.find({}, { pedido_id_origen: 1, estado: 1, _id: 0 }).sort({ pedido_id_origen: 1 });
+[
+  { pedido_id_origen: 756504, estado: 'TERMINADO' },
+  { pedido_id_origen: 756505, estado: 'CONFIRMADO' },
+  { pedido_id_origen: 756506, estado: 'TERMINADO' },
+  { pedido_id_origen: 756507, estado: 'PENDIENTE' },
+  { pedido_id_origen: 756508, estado: 'CONFIRMADO' }
+] // Total: 5 documentos recuperados
 ```
-* **Salida obtenida (5 documentos):**
-  `[{ id: 756504, estado: "TERMINADO" }, { id: 756505, estado: "CONFIRMADO" }, { id: 756506, estado: "TERMINADO" }, { id: 756507, estado: "PENDIENTE" }, { id: 756508, estado: "CONFIRMADO" }]`
 
 #### Q-M2: Filtrar pedidos por estado existente ('CONFIRMADO')
 ```javascript
-db.pedidos.find(
-  { estado: "CONFIRMADO" },
-  { pedido_id_origen: 1, estado: 1, fecha: 1, total: 1, _id: 0 }
-).sort({ pedido_id_origen: 1 });
+foodstore_nosql> db.pedidos.find({ estado: "CONFIRMADO" }, { pedido_id_origen: 1, estado: 1, fecha: 1, total: 1, _id: 0 });
+[
+  { pedido_id_origen: 756505, estado: 'CONFIRMADO', fecha: ISODate('2026-06-08T03:00:00Z'), total: 16307.74 },
+  { pedido_id_origen: 756508, estado: 'CONFIRMADO', fecha: ISODate('2025-11-14T03:00:00Z'), total: 13052.26 }
+] // Total: 2 documentos (IDs: 756505, 756508)
 ```
-* **Salida obtenida (2 documentos):**
-  `[{ id: 756505, estado: "CONFIRMADO", total: 16307.74 }, { id: 756508, estado: "CONFIRMADO", total: 13052.26 }]`
 
-#### Q-M3: Buscar pedidos que contengan un producto determinado (243882) en el arreglo
+#### Q-M3: Buscar pedidos con producto determinado (243882)
 ```javascript
-db.pedidos.find(
-  { "items.producto_id_origen": 243882 },
-  { pedido_id_origen: 1, estado: 1, "items.$": 1, _id: 0 }
-).sort({ pedido_id_origen: 1 });
+foodstore_nosql> db.pedidos.find({ "items.producto_id_origen": 243882 }, { pedido_id_origen: 1, estado: 1, "items.$": 1, _id: 0 });
+[
+  { pedido_id_origen: 756505, estado: 'CONFIRMADO', items: [{ producto_id_origen: 243882, precio_unitario_historico: 3628.43 }] },
+  { pedido_id_origen: 756506, estado: 'TERMINADO',  items: [{ producto_id_origen: 243882, precio_unitario_historico: 3628.43 }] },
+  { pedido_id_origen: 756507, estado: 'PENDIENTE',  items: [{ producto_id_origen: 243882, precio_unitario_historico: 3628.43 }] },
+  { pedido_id_origen: 756508, estado: 'CONFIRMADO', items: [{ producto_id_origen: 243882, precio_unitario_historico: 3628.43 }] }
+] // Total: 4 documentos (IDs: 756505, 756506, 756507, 756508)
 ```
-* **Salida obtenida (4 documentos):** Retorna los pedidos `756505`, `756506`, `756507` y `756508`. Gracias al operador posicional `"items.$"`, la proyección retorna únicamente el subdocumento del producto consultado (`precio_unitario_historico: 3628.43`).
 
-#### Q-M4: Buscar pedidos con total superior a un importe elegido ($15.000)
+#### Q-M4: Filtrar pedidos con total superior a $15.000 ordenado DESC
 ```javascript
-db.pedidos.find(
-  { total: { $gt: 15000 } },
-  { pedido_id_origen: 1, estado: 1, total: 1, _id: 0 }
-).sort({ total: -1 });
+foodstore_nosql> db.pedidos.find({ total: { $gt: 15000 } }, { pedido_id_origen: 1, estado: 1, total: 1, _id: 0 }).sort({ total: -1 });
+[
+  { pedido_id_origen: 756506, estado: 'TERMINADO',  total: 18092.69 },
+  { pedido_id_origen: 756505, estado: 'CONFIRMADO', total: 16307.74 },
+  { pedido_id_origen: 756507, estado: 'PENDIENTE',  total: 15128.05 }
+] // Total: 3 documentos recuperados (Umbral $15k discrimina 3 altos vs 2 estándar)
 ```
-* **Justificación del umbral de $15.000:** Los pedidos de la muestra presentan totales de \$4.517,28, \$13.052,26, \$15.128,05, \$16.307,74 y \$18.092,69. Un umbral de \$15.000 actúa como un discriminador analítico óptimo, dividiendo la muestra de forma equilibrada entre órdenes estándar (2 pedidos) y órdenes de alto ticket (3 pedidos).
-* **Salida obtenida (3 documentos):** Retorna `756506` (\$18.092,69), `756505` (\$16.307,74) y `756507` (\$15.128,05).
 
 ---
 
