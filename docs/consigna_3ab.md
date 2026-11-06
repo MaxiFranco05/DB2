@@ -1,0 +1,35 @@
+# Consigna 3.a y 3.b — Mapa de la Capa de Datos y Plan de Mantenimiento
+
+**Asignatura:** Base de Datos II — Tecnicatura Universitaria en Programación  
+**Proyecto:** Food Store  
+**Equipo:** Máximo Franco, Andrés Novello y Octavio Fiore  
+
+---
+
+## 3.a Mapa de la capa de datos (Los tres motores del proyecto)
+
+La siguiente tabla integra los tres motores trabajados a lo largo de la cursada (**PostgreSQL** en Unidades 1 a 6, **MongoDB** en Unidad 7 y **SQLite** en Unidad 8), especificando qué almacena cada uno y **quién manda (fuente de verdad / autoridad)** sobre cada dato:
+
+| Motor y Rol en la Arquitectura | Qué datos guarda (Objetos / Colecciones / Tablas) | Quién manda sobre cada dato (Fuente de Verdad y Autoridad) |
+| :--- | :--- | :--- |
+| **1. PostgreSQL 16+**<br>*(Servidor central relacional OLTP — Unidades 1 a 6)* | - **Tablas maestras y operativas:** `categoria`, `producto` (precio oficial, stock real, baja lógica `activo`), `usuario` (datos personales y hashes bcrypt con `pgcrypto`), `pedido` y `detalle_pedido` (precio histórico congelado y subtotal).<br>- **Seguridad y auditoría:** Roles de mínimo privilegio (`rol_app_lectura`, `rol_app_escritura`, `rol_soporte`, `rol_reportes`, `app_web`, `admin_datos`), tabla `auditoria` y `usuario_anon`.<br>- **Vistas y resúmenes:** `v_snapshot_movil`, `v_ventas_por_categoria`, `mv_ventas_categoria_mes` y `ventas_diarias_categoria`. | **MANDA POSTGRESQL (Única Fuente de Verdad del Sistema):**<br>- **Precios vigentes y catálogo:** Manda `producto.precio` y `producto.activo` en PostgreSQL.<br>- **Stock real:** Manda `producto.stock` en PostgreSQL (único motor que descuenta inventario).<br>- **Ventas confirmadas y facturación:** Manda `pedido` + `detalle_pedido` en PostgreSQL.<br>- **Identidad, usuarios y permisos:** Manda `usuario` y el esquema de roles de PostgreSQL. |
+| **2. MongoDB 7+**<br>*(Almacén documental desnormalizado de lectura/histórico — Unidad 7)* | - **Colección `pedidos` (`foodstore_nosql`):** Documentos JSON/BSON con *embedding* completo del pedido (`pedido_id_origen`, `fecha`, `estado`, `forma_pago`, `total_pedido`), subdocumento `cliente` (`usuario_id`, `nombre`, `apellido`, `mail`, sin contraseña) y arreglo embebido `items[]` (`producto_id`, `nombre`, `cantidad`, `precio_unitario`, `subtotal`). | **Manda PostgreSQL sobre la transacción; MongoDB es proyección derivada de consulta rápida:**<br>- **Origen del pedido:** Manda PostgreSQL (`pedido_id_origen`); MongoDB recibe documentos ya consolidados para lectura en una sola operación sin `JOIN`s.<br>- **Inmutabilidad histórica del documento:** Una vez cerrado y migrado el pedido, el documento en MongoDB conserva congelada la foto histórica de `items[]` y `total_pedido` para consultas analíticas o de historial de cliente. |
+| **3. SQLite 3.37+ (`STRICT`)**<br>*(Base embebida offline en la tablet de la feria — Unidad 8)* | - **Caché de catálogo:** `producto_cache` y `snapshot_servidor` (copia local en centavos `precio_centavos`, `stock_visto`, `disponible`, `eliminado` y `fecha_copia`).<br>- **Borradores locales:** `pedido_borrador` (`id_local` UUID, `usuario`, `forma_pago`, `fecha`) e `item_borrador` (`cantidad`, `precio_centavos_visto`).<br>- **Cola de sincronización:** `cola_sync` (`solicitud_uuid`, `id_local`, `estado`, `motivo`). | **Manda la Tablet SOLO sobre el borrador local; PostgreSQL manda al sincronizar:**<br>- **Intención de compra offline (borrador y UUID de solicitud):** Manda SQLite mientras la tablet no tiene señal (`pedido_borrador`, `item_borrador`, `cola_sync`).<br>- **Validación del semáforo, precio real, stock y confirmación de venta:** Manda **PostgreSQL** ("el móvil propone, el servidor dispone"; `SIMULADO_APROBADO` en SQLite nunca es una venta firme hasta que PostgreSQL la procesa). |
+
+---
+
+## 3.b Plan de mantenimiento (Integración con la Unidad 6)
+
+Como extensión directa del plan de contingencia y recuperación ante desastres de la Unidad 6 (`informe_u6.md`), se definen los tres procedimientos operativos que incorporan las tablets y el ecosistema multi-motor:
+
+1. **¿Qué se respalda y cómo se prueba la restauración?**  
+   - **En el servidor (PostgreSQL y MongoDB):** Se respalda diariamente la fuente de verdad en PostgreSQL mediante `pg_dump -Fc` (`backups/foodstore_YYYYMMDD_HHMMSS.dump`) junto con el archivado continuo de WAL, y la colección documental en MongoDB mediante `mongodump`. En las tablets (SQLite), antes de cada cierre de turno o resincronización en la feria se realiza una copia consistente del archivo `movil/foodstore_movil.db` usando `.backup` (o `VACUUM INTO 'backup_tablet.db'`) para resguardar los borradores pendientes.  
+   - **Prueba de restauración:** Tal como se ejecutó en la Unidad 6 (RTO medido de `6,95 s`), el dump de PostgreSQL se restaura periódicamente en una base aislada de prueba (`foodstore_restore_test` con `pg_restore --no-owner --no-privileges`) y se verifica que los conteos de filas (`categoria`, `usuario`, `producto`, `pedido`, `detalle_pedido`) coincidan al 100% con `EXCEPT` (`0 filas` de diferencia) y que no existan precios ni stocks negativos.
+
+2. **Si se restaura un respaldo viejo de PostgreSQL, ¿qué hacen las tablets?**  
+   - Si el servidor central sufre un incidente y debe restaurarse a un punto en el tiempo anterior (perdiendo los cambios ocurridos dentro de la ventana del RPO), las tablets **descartan inmediatamente su `producto_cache` local** (ya que sus precios vistos, stocks o altas/bajas posteriores al backup restaurado quedaron desfasados respecto al estado real reconstruido en el servidor) y descargan una **nueva instantánea completa (`v_snapshot_movil` → `servidor_snapshot.csv`)**.  
+   - A continuación, las solicitudes de borradores que habían sido armadas o enviadas después del timestamp del backup restaurado se vuelven a contrastar con el semáforo contra la nueva instantánea del servidor para revalidar precios, disponibilidad y stock antes de intentar confirmarlas, evitando dar por sentadas ventas que el servidor restaurado no conoce.
+
+3. **¿Cada cuánto y quién revisa las solicitudes en `CONFLICTO` o `RECHAZADO`?**  
+   - **En tiempo de atención en el food truck (revisión inmediata):** El **operador de la tablet (cajero/vendedor de la feria)** revisa las solicitudes en `CONFLICTO` o `RECHAZADO` **en cada reconexión o lote de sincronización** (cada 5 a 15 minutos o al recuperar señal): ante un `CONFLICTO` de precio (Caso C2), consulta al cliente en el mostrador si acepta el nuevo importe vigente para actualizar el borrador y emitir una nueva `solicitud_uuid`; ante un `RECHAZADO` por falta de stock (C3) o baja lógica (C4), ofrece un producto alternativo o cancela el borrador.  
+   - **Al cierre de la jornada (auditoría operativa):** El **administrador de datos (`admin_datos` / supervisor de turno)** revisa al finalizar cada día de feria el listado consolidado de filas en `cola_sync` que quedaron en `CONFLICTO` o `RECHAZADO` sin resolver, con el fin de detectar productos con quiebres recurrentes de stock o desfasajes frecuentes de precios antes de abrir la jornada siguiente.
