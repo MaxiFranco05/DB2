@@ -1,57 +1,69 @@
-# TP8 - Kiro - Implementación de Bases de Datos
+# FoodStore — Sistema de Base de Datos Relacional (PostgreSQL)
 
-## Instrucciones de Despliegue (Setup)
-Para inicializar el ecosistema de bases de datos desde cero, ejecutar en el siguiente orden:
-
-1. **PostgreSQL (Capa de Verdad Central):**
-   Ejecutar los scripts ubicados en la carpeta `/sql` (esquema, restricciones, triggers y roles).
-2. **MongoDB (Capa Histórica Documental):**
-   Ejecutar el script `consultas_mongodb.js` mediante `mongosh` para generar las proyecciones de pedidos.
-3. **SQLite (Capa Móvil Offline):**
-   Ejecutar el script `movil/semaforo.sql`, crear el esquema `STRICT` y cargar los datos cacheados en `producto_cache`.
+> [!IMPORTANT]
+> **División de Repositorios (Unidades 7 y 8):**  
+> Por consigna académica y separación arquitectónica de tecnologías, los módulos de **NoSQL (MongoDB - Unidad 7)** y **Persistencia Móvil Desconectada (SQLite STRICT - Unidad 8)** se encuentran en su repositorio oficial dedicado:  
+> 🔗 **[https://github.com/MaxiFranco05/DB2-NoSQL](https://github.com/MaxiFranco05/DB2-NoSQL)**  
+> Este repositorio (`DB2`) contiene la **Capa de Verdad Central Relacional en PostgreSQL 16+** (Unidades 1 a 6).
 
 ---
 
-## Historial de Trabajos Prácticos Anteriores
+### Integrantes del Equipo:
+* **Máximo Franco**
+* **Andrés Novello**
+* **Octavio Fiore**
 
-# FoodStore
-### Proyecto de base de datos para una tienda de alimentos.
 ---
-### Miembros:
-##### - Máximo Franco
-##### - Andrés Novello
-##### - Octavio Fiore
----
-## Estructura
 
-```
+## 🏛️ Ecosistema Multi-Motor y Fuentes de Verdad
+
+1. **PostgreSQL 16+ (`DB2` - Repositorio Principal):**
+   * **Fuente de Verdad Canónica:** Precios oficiales, stock real, pedidos firmes, auditoría y control de acceso RBAC.
+   * **Scripts:** Carpeta `/sql` (esquema, restricciones, triggers de integridad, roles, vistas materializadas y planes de mantenimiento).
+
+2. **MongoDB 7+ (`DB2-NoSQL`):**
+   * **Almacén Documental Histórico:** Colección desnormalizada de pedidos con embedding completo de ítems para lectura rápida sin `JOIN`s.
+   * **Repositorio:** [github.com/MaxiFranco05/DB2-NoSQL](https://github.com/MaxiFranco05/DB2-NoSQL)
+
+3. **SQLite 3.37+ (`DB2-NoSQL/food-store`):**
+   * **Capa Móvil Offline:** Base de datos embebida con modo `STRICT` y dinero en centavos enteros para food trucks y ferias.
+   * Regla de Oro: *"El móvil propone, el servidor dispone"* (0 ventas automáticas en PostgreSQL sin sincronización formal).
+   * **Repositorio:** [github.com/MaxiFranco05/DB2-NoSQL/tree/main/food-store](https://github.com/MaxiFranco05/DB2-NoSQL/tree/main/food-store)
+
+---
+
+## 📁 Estructura del Proyecto
+
+```text
 FoodStore/
-├── src/                     # Código fuente
-├── db/
-│   ├── schema.sql           # Esquema de base de datos
-│   └── backups/             # Backups de pg_dump
-├── docs/                    # Documentación y diagramas
-├── .env.example             # Variables de entorno (sin valores reales)
-└── .kiro/                   # Configuración de Kiro
+├── sql/                     # Scripts SQL canónicos (esquema, restricciones, roles, auditoría)
+├── db/                      # Pruebas y backups
+├── docs/                    # Informes técnicos de cada unidad, DUIA y bitácoras
+├── movil/                   # Copia local de scripts SQLite y snapshot
+├── .env.example             # Variables de entorno template (sin credenciales)
+└── .kiro/                   # Especificaciones de ingeniería dirigida por especificaciones (SDD)
 ```
 
-## Setup
+---
+
+## 🚀 Despliegue y Base de Datos (PostgreSQL)
 
 ```bash
 # Copiar variables de entorno
 cp .env.example .env
-# Editar .env con tus valores
-```
 
-## Base de datos
+# Aplicar esquema base
+psql -d foodstore -f sql/schema.sql
 
-```bash
-# Aplicar esquema
-psql -d foodstore -f db/schema.sql
+# Aplicar restricciones y triggers de integridad
+psql -d foodstore -f sql/restricciones.sql
+
+# Aplicar roles y permisos (RBAC)
+psql -d foodstore -f sql/roles.sql
 
 # Backup
-pg_dump -d foodstore > db/backups/backup_$(date +%Y%m%d).dump
+pg_dump -Fc -d foodstore > db/backups/backup_$(date +%Y%m%d).dump
 
 # Restore
-pg_restore -d foodstore db/backups/backup_20260101.dump
+pg_restore -d foodstore db/backups/backup_YYYYMMDD.dump
 ```
