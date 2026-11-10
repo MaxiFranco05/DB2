@@ -8,10 +8,18 @@
 
 ---
 
-### Integrantes del Equipo:
+### Integrantes del Equipo (Comisión C3 · Prof. Sergio Neira):
 * **Máximo Franco**
 * **Andrés Novello**
 * **Octavio Fiore**
+
+---
+
+## 📑 Informe Técnico Integrador — Segunda Entrega (Unidades 4 a 8)
+
+El informe técnico unificado que acredita el cumplimiento de los **14 objetivos** y responde a los **5 puntos obligatorios** de la consigna oficial se encuentra disponible en:
+* 📄 **Versión PDF:** [`docs/informe_tecnico_segunda_entrega.pdf`](docs/informe_tecnico_segunda_entrega.pdf)
+* 📝 **Versión Markdown:** [`docs/informe_tecnico_segunda_entrega.md`](docs/informe_tecnico_segunda_entrega.md)
 
 ---
 
@@ -39,6 +47,9 @@ FoodStore/
 ├── sql/                     # Scripts SQL canónicos (esquema, restricciones, roles, auditoría)
 ├── db/                      # Pruebas y backups
 ├── docs/                    # Informes técnicos de cada unidad, DUIA y bitácoras
+│   ├── informe_tecnico_segunda_entrega.pdf   # Informe integrador oficial (Unidades 4 a 8)
+│   ├── informe_u6.pdf                        # Informe post-incidente y RTO de la Unidad 6
+│   └── informe_u7.pdf                        # Informe técnico de modelado NoSQL (Unidad 7)
 ├── movil/                   # Copia local de scripts SQLite y snapshot
 ├── .env.example             # Variables de entorno template (sin credenciales)
 └── .kiro/                   # Especificaciones de ingeniería dirigida por especificaciones (SDD)
