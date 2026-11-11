@@ -35,12 +35,12 @@ El presente trabajo acredita de manera formal y verificable la totalidad de los 
 | **6** | **U5** | Auditoría de permisos asistida por IA con decisión humana documentada | `docs/DUIA/DUIA-TP-Unidad5.md` | Eliminación de contraseñas hardcodeadas en texto plano en favor de variables de entorno. |
 | **7** | **U6** | Plan de mantenimiento integral automatizado con scripts y tareas rutinarias | `sql/maintenance.sql` <br> `sql/health_check.sql` | Rutinas periódicas de `VACUUM ANALYZE`, reindexación y chequeo de salud del motor. |
 | **8** | **U6** | Simulacro de desastre contra reloj con informe post-incidente | `docs/informe_u6.md` <br> `docs/informe_u6.pdf` | **RTO observado: 6,95 segundos** (contra SLA < 300 s). Paridad de 891.992 registros (100%). |
-| **9** | **U7** | Modelado documental en MongoDB con consultas sobre datos reales | `consultas_mongodb.js` <br> `modelo_documental.md` | Carga de 5 pedidos operacionales y consultas documentales Q-M1 a Q-M4 en `mongosh`. |
+| **9** | **U7** | Modelado documental en MongoDB con consultas sobre datos reales | `consultas_mongodb.js` <br> `modelo_documental.md` | Carga de 5 pedidos con `Decimal128`, validador `$jsonSchema` y consultas Q-M1 a Q-M4. |
 | **10** | **U7** | Comparación práctica y documentada entre solución documental y relacional | `consigna5_tabla_comparativa.md` <br> `consultas_postgresql.sql` | Paridad simétrica Q-M2/Q-PG1 (2 filas) y Q-M3/Q-PG2 (4 filas) con precios congelados. |
-| **11** | **U8** | Base SQLite especificada en Kiro y generada en modo STRICT | `.kiro/specs/tp8-tablet/` <br> `movil/schema_sqlite.sql` | Esquema estricto con dinero en centavos enteros (`INTEGER`) para puntos de venta feria. |
-| **12** | **U8** | Sincronización simulada contra servidor con resolución de conflictos | `movil/semaforo.sql` <br> `movil/casos_simulacion.sql` | Casos C2 (`CONFLICTO` de precio), C3 (`RECHAZADO` stock), C4 (lápida), C5 (`APROBADO`) y C6 (idempotencia). |
-| **13** | **U8** | Code review final asistido por IA de toda la cursada con decisión humana | `food-store/docs/3c_code_review_ia.md` | Auditoría sobre PostgreSQL, MongoDB y SQLite con descartes técnicos fundamentados. |
-| **14** | **Global** | Capa de datos completa con specs, scripts versionados, DUIA y bitácora | Repositorios GitHub `DB2` y `DB2-NoSQL` | Ecosistema listo para defensa oral con trazabilidad metodológica completa. |
+| **11** | **U8** | Base SQLite especificada en Kiro y generada en modo STRICT | `.kiro/specs/tp8-tablet/` <br> `movil/schema_sqlite.sql` | 5 tablas STRICT con dinero en centavos enteros (`INTEGER`) e importación con `fecha_copia`. |
+| **12** | **U8** | Sincronización simulada contra servidor con resolución de conflictos | `movil/semaforo.sql` <br> `movil/casos_simulacion.sql` | Batería 100% automatizada: C2 (`CONFLICTO` resuelto), C3 (`RECHAZADO`), C4 (lápida), C5 (`APROBADO`) y C6 (`UNIQUE`). |
+| **13** | **U8** | Code review final asistido por IA de toda la cursada con comprobaciones | `docs/consigna_3c.md` | 5 hallazgos auditados en PostgreSQL, MongoDB y SQLite con comprobaciones empíricas. |
+| **14** | **Global** | Capa de datos completa con specs, scripts versionados, DUIA y guión oral | Repositorios GitHub `DB2` y `DB2-NoSQL` | Ecosistema probado de punta a punta y listo para su defensa oral. |
 
 ---
 
@@ -69,19 +69,20 @@ El presente trabajo acredita de manera formal y verificable la totalidad de los 
 * **Rutina de Respaldo Automatizado:** Procedimiento en PowerShell que ejecuta `pg_dump -Fc` con compresión binaria y catálogo de objetos (TOC), verificando códigos de salida y generando logs fechados.
 
 ### Unidad 7 · NoSQL y bases de datos documentales (MongoDB)
-* **Modelado Documental:** Migración de una muestra real y representativa de 5 pedidos de producción (`756504` a `756508`) del cliente `80584` hacia la colección `foodstore_nosql.pedidos`.
-* **Embedding Estratégico:** Incrustación completa del array de `items` (congelando el precio histórico `precio_unitario_historico` al momento de la venta) y de los datos de contacto del cliente en el mismo documento BSON.
-* **Consultas Documentales:** Implementación en `consultas_mongodb.js` de las 4 operaciones clave (Q-M1: listado general, Q-M2: pedidos confirmados, Q-M3: búsqueda por producto embebido con proyección posicional `items.$`, y Q-M4: filtro por total).
+* **Modelado Documental e Inmutabilidad:** Migración de 5 pedidos de producción (`756504` a `756508`) del cliente `80584` hacia `foodstore_nosql.pedidos`, congelando precios históricos en el array embebido `items`.
+* **Tipos de Alta Precisión (`Decimal128`):** Todos los importes monetarios (`total`, `precio_unitario_historico`, `subtotal`) se almacenan como `NumberDecimal` en BSON, eliminando cualquier imprecisión de coma flotante binaria.
+* **Validador de Esquema (`$jsonSchema`):** Colección blindada mediante validador formal que exige tipos nativos, campos requeridos y garantiza la regla de integridad RI-M2 (array `items` con `minItems: 1`).
+* **Consultas Documentales y Contraste de IA:** Implementación en `consultas_mongodb.js` de Q-M1 a Q-M4 y ejecución de prueba de laboratorio con rechazo de duplicados por índice único sobre `pedido_id_origen`.
 
 ### Unidad 8 · Bases de datos móviles e integración (SQLite)
-* **Esquema Móvil Desconectado:** Modelo embebido en SQLite con modo `STRICT` y dinero expresado en **centavos enteros (`INTEGER`)** para eliminar cualquier error de redondeo IEEE 754 de punto flotante en ferias sin señal.
-* **Algoritmo de Sincronización (Semáforo):** Script `movil/semaforo.sql` que evalúa los borradores locales encolados (`cola_sync`) contra la instantánea del servidor (`snapshot_servidor`) clasificándolos en cuatro estados jerárquicos: `SIMULADO_APROBADO`, `CONFLICTO`, `RECHAZADO` o `PENDIENTE`.
+* **Esquema Móvil Desconectado con Modo STRICT:** Modelo embebido en SQLite con 5 tablas en modo estricto y dinero expresado en **centavos enteros (`INTEGER`)** para asegurar exactitud matemática total en ferias sin señal.
+* **Instantánea con Marca Temporal (`fecha_copia`):** Exportación de catálogo mediante `v_snapshot_movil` en PostgreSQL con `to_char(CURRENT_TIMESTAMP, ...)` hacia `servidor_snapshot.csv`, importada a `snapshot_servidor` y transferida a `producto_cache`.
+* **Algoritmo del Semáforo con Prioridades Rigurosas:** Evaluación jerárquica: Rechazo por stock o baja lógica (Prioridad 1) sobre Conflicto de precio (Prioridad 2) sobre Aprobación simulada (Prioridad 3).
+* **Batería de Simulación 100% Automatizada:** Script `movil/casos_simulacion.sql` ejecutable de principio a fin demostrando la resolución de C2, quiebre de C3, lápida de C4, aprobación de C5 e idempotencia de C6 sin código comentado.
 
 ---
 
 ## 2. Cómo se probó su funcionamiento
-
-La totalidad de los artefactos fue sometida a pruebas empíricas rigurosas en entornos aislados:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -119,8 +120,8 @@ La totalidad de los artefactos fue sometida a pruebas empíricas rigurosas en en
    * Q-PG2 vs Q-M3: Retornaron idénticos 4 pedidos (`756505`, `756506`, `756507`, `756508`).
    * Se comprobó la integridad exacta del precio histórico del producto 243882 en ambos motores ($3628,43).
 5. **Batería de Pruebas del Semáforo Móvil (U8):**  
-   Se ejecutaron los casos de prueba sobre `foodstore_movil.db`:
-   * **Caso C2 (Cambio de Precio):** La tablet tenía el Producto 1 a 421451 centavos y el servidor subió a 450000. El semáforo marcó `CONFLICTO`. Tras la aceptación del nuevo precio por parte del cliente, se generó una nueva solicitud que pasó a `SIMULADO_APROBADO`.
+   Se ejecutaron los casos de prueba sobre `foodstore_movil.db` mediante el script unificado `casos_simulacion.sql`:
+   * **Caso C2 (Cambio de Precio):** La tablet tenía el Producto 1 a 421451 centavos y el servidor subió a 450000. El semáforo marcó `CONFLICTO`. Tras la aceptación del nuevo precio por parte del cliente, se generó una nueva solicitud (`req-uuid-c2-0002`) que pasó a `SIMULADO_APROBADO`.
    * **Caso C3 (Falta de Stock):** Solicitud de 50 unidades sobre 36 disponibles. Marcó `RECHAZADO` por stock insuficiente.
    * **Caso C4 (Baja Lógica / Lápida):** Producto 3 desactivado en servidor (`activo = false`). Marcó `RECHAZADO` y conservó la fila en `producto_cache` con `disponible = 0` y `eliminado = 1` para no romper la integridad referencial de los borradores previos.
    * **Caso C5 (Sin Cambios):** Coincidencia total en precio, stock y disponibilidad. Marcó `SIMULADO_APROBADO`.
@@ -149,13 +150,40 @@ El simulacro de recuperación ante desastres arrojó una performance excepcional
 
 ### 3.2. Aislamiento Total "Móvil Propone, Servidor Dispone" (Unidad 8)
 
-Tras ejecutar la batería completa de simulación en la base SQLite móvil, se ejecutó la consulta de control en el servidor central PostgreSQL:
+Para comprobar de forma rigurosa la consistencia de la arquitectura, se ejecutó en PostgreSQL (`consulta_final.sql`) el control posterior a la simulación móvil:
 
 ```sql
-SELECT COUNT(*) AS pedidos_nuevos FROM pedido WHERE fecha >= '2026-11-05 18:00:00';
+-- 1. Control de aislamiento de pedidos en central:
+SELECT COUNT(*) AS pedidos_nuevos_en_servidor
+FROM pedido 
+WHERE fecha >= '2026-11-05 18:00:00';
+
+-- 2. Estado oficial del catálogo en PostgreSQL tras los cambios del servidor:
+SELECT id, nombre, precio, stock, activo
+FROM producto
+WHERE id IN (1, 2, 3, 4)
+ORDER BY id;
 ```
-* **Resultado obtenido:** `0 filas`.
-* **Conclusión técnica:** Se demostró fehacientemente que las transacciones locales marcadas como `SIMULADO_APROBADO` en la tablet permanecen en aislamiento offline estricto y jamás alteran el stock real ni insertan pedidos en el servidor central hasta que un proceso de sincronización formal las ingesta.
+
+* **Resultados reales obtenidos en consola PostgreSQL:**
+```text
+ pedidos_nuevos_en_servidor 
+----------------------------
+                          0
+(1 fila)
+
+ id |   nombre   | precio  | stock | activo 
+----+------------+---------+-------+--------
+  1 | Producto 1 | 4500.00 |   184 | t
+  2 | Producto 2 |  766.89 |    36 | t
+  3 | Producto 3 | 3289.26 |   199 | f
+  4 | Producto 4 |  630.36 |   154 | t
+(4 filas)
+```
+
+* **Coherencia técnica absoluta verificada:**
+  1. En PostgreSQL, el `Producto 1` efectivamente refleja su nuevo precio oficial ($4500.00) y el `Producto 3` se encuentra dado de baja lógica (`activo = false`) debido a los eventos de servidor (`casos_servidor.sql`).
+  2. Al mismo tiempo, el conteo de pedidos nuevos es `0` y los stocks (184, 36, 199, 154) permanecieron **100% inalterados**, acreditando que las solicitudes locales marcadas como `SIMULADO_APROBADO` en la tablet jamás alteran la base de producción sin sincronización formal previa.
 
 ---
 
@@ -171,7 +199,7 @@ SELECT COUNT(*) AS pedidos_nuevos FROM pedido WHERE fecha >= '2026-11-05 18:00:0
 
 ### 3. Selección Tecnológica: Almacén Documental (MongoDB) vs. Relacional (PostgreSQL) (U7)
 * **Transacciones y Fuente de Verdad en PostgreSQL:** La compra activa, el control de concurrencia ACID y el descuento de stock físico deben residir indispensablemente en el motor relacional para prevenir condiciones de carrera y garantizar consistencia inmediata.
-* **Historial Inmutable en MongoDB:** Una vez finalizado el pedido, la consulta frecuente del cliente no requiere transaccionalidad ni bloqueos. Almacenar el pedido en MongoDB con sus ítems y cliente embebidos permite recuperarlo en una sola lectura de disco ($O(1)$) sin realizar ningún `JOIN`. Congelar `precio_unitario_historico` dentro del documento previene que cambios posteriores en la tabla de productos alteren las facturaciones históricas.
+* **Historial Inmutable en MongoDB:** Una vez finalizado el pedido, la consulta frecuente del cliente no requiere transaccionalidad ni bloqueos. Almacenar el pedido en MongoDB con sus ítems y cliente embebidos permite recuperarlo en una sola lectura de disco ($O(1)$) sin realizar ningún `JOIN`. Congelar `precio_unitario_historico` con `Decimal128` dentro del documento previene que cambios posteriores en la tabla de productos alteren las facturaciones históricas.
 
 ### 4. Persistencia Desconectada en SQLite con STRICT y Centavos (U8)
 * **Tipificación Estricta (`STRICT`):** SQLite por defecto utiliza afinidad de tipos dinámica, lo que permite almacenar texto en columnas numéricas. Activar `STRICT` forzó la validación estricta de tipos nativos en el motor cliente.
@@ -187,7 +215,7 @@ SELECT COUNT(*) AS pedidos_nuevos FROM pedido WHERE fecha >= '2026-11-05 18:00:0
 | :--- | :--- |
 | **Kiro (SDD)** | Especificación dirigida por requisitos en notación EARS (`requirements.md`, `design.md`, `tasks.md`) para la arquitectura offline de U8. |
 | **Antigravity (LLM)** | Generación de scripts DDL en modo `STRICT`, algoritmos transaccionales de sincronización (`semaforo.sql`) y estructuras de consultas MongoDB. |
-| **OpenCode (Agente Plan)** | Auditoría técnica y code review integral de los scripts de la cursada (PostgreSQL, MongoDB y SQLite) para detectar brechas de seguridad y concurrencia. |
+| **OpenCode (Agente Plan)** | Auditoría técnica y code review integral de los scripts de la cursada (PostgreSQL, MongoDB y SQLite) con comprobaciones en base de datos. |
 
 ---
 
@@ -245,11 +273,11 @@ En estricto cumplimiento del protocolo de la cátedra, cada propuesta formulada 
 | **Campo** | **Completar** |
 | :--- | :--- |
 | **Herramienta** | OpenCode (Agente: Plan) |
-| **Spec o prompt utilizado** | *"Auditoría integral y code review de scripts de PostgreSQL (U1-U6), MongoDB (U7) y SQLite (U8) detectando riesgos de concurrencia y seguridad."* |
-| **Qué generó** | Matriz de hallazgos técnicos sobre contraseñas en texto plano, esquemas BSON sin `$jsonSchema`, y condiciones de carrera en stock. |
-| **Qué se aceptó** | 66% de las propuestas (parametrización de contraseñas de roles en U5 e índices multikey en MongoDB U7). |
-| **Qué se modificó o descartó, y por qué** | Se descartó reescribir el trigger de stock en PostgreSQL con `UPDATE` bloqueante, ya que los scripts de la cursada están calibrados para validación de reglas pedagógicas y alterar los datos rompería los benchmarks masivos (`Genera_registros.sql`). |
-| **Verificación realizada** | ✅ Validación de contraseñas seguras mediante variables de entorno.<br>✅ Comprobación de explain plan en MongoDB evitando `COLLSCAN`.<br>✅ Registro formal en `docs/consigna_3c.md`. |
+| **Spec o prompt utilizado** | *"Auditoría integral y code review de scripts de PostgreSQL (U1-U6), MongoDB (U7) y SQLite (U8) detectando riesgos de concurrencia y seguridad con comprobaciones en base."* |
+| **Qué generó** | Matriz de 5 hallazgos técnicos (roles con contraseñas en texto plano, validador `$jsonSchema`, carrera de stock pedagógica, tipos dinámicos SQLite, e idempotencia por UUID). |
+| **Qué se aceptó** | 80% de las propuestas (roles parametrizados, tipos estrictos, deduplicación e índices). |
+| **Qué se modificó o descartó, y por qué** | Se descartó con fundamento el trigger de stock con `UPDATE` bloqueante para no romper la compatibilidad con los scripts de carga masiva de la cátedra (`Genera_registros.sql`). |
+| **Verificación realizada** | ✅ Comprobaciones reales en consola para cada hallazgo documentadas en `docs/consigna_3c.md`. |
 
 ---
 

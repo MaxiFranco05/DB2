@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Food Store - Trabajo Práctico N.° 8 (Consigna 1.b: La base de la tablet)
 -- Motor: SQLite 3.37+ (Modo STRICT)
+-- Comisión: C3 · Prof. Sergio Neira
 -- Equipo: Máximo Franco, Andrés Novello y Octavio Fiore
 -- =============================================================================
 
@@ -10,8 +11,21 @@ DROP TABLE IF EXISTS cola_sync;
 DROP TABLE IF EXISTS item_borrador;
 DROP TABLE IF EXISTS pedido_borrador;
 DROP TABLE IF EXISTS producto_cache;
+DROP TABLE IF EXISTS snapshot_servidor;
 
--- 1. Caché local del catálogo descargado del servidor
+-- 1. Tabla staging receptora del snapshot exportado desde PostgreSQL
+--    Almacena la instantánea exacta del CSV generado con 10_snapshot_catalogo.sql
+CREATE TABLE snapshot_servidor (
+    id              INTEGER PRIMARY KEY,
+    nombre          TEXT    NOT NULL,
+    precio_centavos INTEGER NOT NULL CHECK (precio_centavos >= 0),
+    stock           INTEGER NOT NULL,
+    disponible      TEXT    NOT NULL, -- 't' o 'f' proveniente del CSV
+    eliminado       TEXT    NOT NULL, -- 't' o 'f' proveniente del CSV
+    fecha_copia     TEXT    NOT NULL
+) STRICT;
+
+-- 2. Caché local de catálogo utilizado por la interfaz de la tablet
 CREATE TABLE producto_cache (
     id              INTEGER PRIMARY KEY,
     nombre          TEXT    NOT NULL,
@@ -22,7 +36,7 @@ CREATE TABLE producto_cache (
     fecha_copia     TEXT    NOT NULL
 ) STRICT;
 
--- 2. Cabecera del pedido borrador armado offline en la tablet
+-- 3. Cabecera del pedido borrador armado offline en la tablet
 CREATE TABLE pedido_borrador (
     id_local   TEXT PRIMARY KEY,
     usuario    TEXT NOT NULL,
@@ -30,7 +44,7 @@ CREATE TABLE pedido_borrador (
     fecha      TEXT NOT NULL
 ) STRICT;
 
--- 3. Ítems del pedido borrador con claves foráneas y validación de cantidad > 0
+-- 4. Ítems del pedido borrador con claves foráneas y validación de cantidad > 0
 CREATE TABLE item_borrador (
     id_local              TEXT    NOT NULL REFERENCES pedido_borrador(id_local) ON DELETE CASCADE,
     producto_id           INTEGER NOT NULL REFERENCES producto_cache(id),
@@ -39,7 +53,7 @@ CREATE TABLE item_borrador (
     PRIMARY KEY (id_local, producto_id)
 ) STRICT;
 
--- 4. Cola de sincronización local evaluada por el semáforo
+-- 5. Cola de sincronización local evaluada por el semáforo
 CREATE TABLE cola_sync (
     solicitud_uuid TEXT PRIMARY KEY,
     id_local       TEXT NOT NULL REFERENCES pedido_borrador(id_local) ON DELETE CASCADE,

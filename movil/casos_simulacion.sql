@@ -1,26 +1,44 @@
 -- =============================================================================
--- Food Store - Trabajo Práctico N.° 8 (Consigna 2.c: Casos de simulación C2 a C6)
--- Motor: SQLite 3.37+ (con instantánea exportada desde PostgreSQL de pruebas)
+-- Food Store - Trabajo Práctico N.° 8 (Consigna 2.c: Casos de Simulación C2 a C6)
+-- Motor: SQLite 3.37+
+-- Comisión: C3 · Prof. Sergio Neira
 -- Equipo: Máximo Franco, Andrés Novello y Octavio Fiore
+-- 
+-- Ejecución completa:
+--   sqlite3 foodstore_movil.db < movil/schema_sqlite.sql
+--   sqlite3 foodstore_movil.db < movil/casos_simulacion.sql
 -- =============================================================================
 
 PRAGMA foreign_keys = ON;
 
--- Limpieza previa de borradores de prueba para corrida limpia de los casos C2 a C6
+-- -----------------------------------------------------------------------------
+-- PASO 1: Limpieza e inicialización de la instantánea original en la tablet
+-- -----------------------------------------------------------------------------
 DELETE FROM cola_sync;
 DELETE FROM item_borrador;
 DELETE FROM pedido_borrador;
+DELETE FROM producto_cache;
+DELETE FROM snapshot_servidor;
 
--- =============================================================================
--- 1. Armado de los 4 borradores en la tablet (con los datos iniciales de producto_cache)
---    - Producto 1: precio_centavos = 421451, stock_visto = 184, disponible = 1, eliminado = 0
---    - Producto 2: precio_centavos =  76689, stock_visto =  36, disponible = 1, eliminado = 0
---    - Producto 3: precio_centavos = 328926, stock_visto = 199, disponible = 1, eliminado = 0
---    - Producto 4: precio_centavos =  63036, stock_visto = 154, disponible = 1, eliminado = 0
--- =============================================================================
-BEGIN;
+-- Carga de la instantánea inicial del catálogo (previa a cambios en el servidor)
+INSERT INTO snapshot_servidor (id, nombre, precio_centavos, stock, disponible, eliminado, fecha_copia)
+VALUES
+    (1, 'Producto 1', 421451, 184, 't', 'f', '2026-11-05 10:00:00'),
+    (2, 'Producto 2',  76689,  36, 't', 'f', '2026-11-05 10:00:00'),
+    (3, 'Producto 3', 328926, 199, 't', 'f', '2026-11-05 10:00:00'),
+    (4, 'Producto 4',  63036, 154, 't', 'f', '2026-11-05 10:00:00');
 
--- Caso C2: Borrador sobre Producto 1 al precio original (421451 centavos)
+-- Poblar producto_cache a partir de la instantánea inicial
+INSERT INTO producto_cache (id, nombre, precio_centavos, stock_visto, disponible, eliminado, fecha_copia)
+SELECT id, nombre, precio_centavos, stock, 1, 0, fecha_copia
+FROM snapshot_servidor;
+
+-- -----------------------------------------------------------------------------
+-- PASO 2: Construcción de los 4 borradores offline en la tablet
+-- -----------------------------------------------------------------------------
+BEGIN TRANSACTION;
+
+-- Borrador C2: sobre Producto 1 al precio visto original (421451)
 INSERT INTO pedido_borrador (id_local, usuario, forma_pago, fecha)
 VALUES ('c2000000-0000-4000-8000-000000000002', 'operador_feria', 'TARJETA', '2026-11-05T19:15:00Z');
 INSERT INTO item_borrador (id_local, producto_id, cantidad, precio_centavos_visto)
@@ -28,7 +46,7 @@ VALUES ('c2000000-0000-4000-8000-000000000002', 1, 2, 421451);
 INSERT INTO cola_sync (solicitud_uuid, id_local, estado, motivo)
 VALUES ('req-uuid-c2-0001', 'c2000000-0000-4000-8000-000000000002', 'PENDIENTE', NULL);
 
--- Caso C3: Borrador sobre Producto 2 pidiendo 50 unidades (más de las 36 que quedan en stock)
+-- Borrador C3: sobre Producto 2 solicitando 50 unidades (stock disponible: 36)
 INSERT INTO pedido_borrador (id_local, usuario, forma_pago, fecha)
 VALUES ('c3000000-0000-4000-8000-000000000003', 'operador_feria', 'EFECTIVO', '2026-11-05T19:16:00Z');
 INSERT INTO item_borrador (id_local, producto_id, cantidad, precio_centavos_visto)
@@ -36,7 +54,7 @@ VALUES ('c3000000-0000-4000-8000-000000000003', 2, 50, 76689);
 INSERT INTO cola_sync (solicitud_uuid, id_local, estado, motivo)
 VALUES ('req-uuid-c3-0001', 'c3000000-0000-4000-8000-000000000003', 'PENDIENTE', NULL);
 
--- Caso C4: Borrador sobre Producto 3 (que luego será dado de baja lógica en el servidor)
+-- Borrador C4: sobre Producto 3 (que luego será dado de baja en el servidor)
 INSERT INTO pedido_borrador (id_local, usuario, forma_pago, fecha)
 VALUES ('c4000000-0000-4000-8000-000000000004', 'operador_feria', 'TRANSFERENCIA', '2026-11-05T19:17:00Z');
 INSERT INTO item_borrador (id_local, producto_id, cantidad, precio_centavos_visto)
@@ -44,7 +62,7 @@ VALUES ('c4000000-0000-4000-8000-000000000004', 3, 1, 328926);
 INSERT INTO cola_sync (solicitud_uuid, id_local, estado, motivo)
 VALUES ('req-uuid-c4-0001', 'c4000000-0000-4000-8000-000000000004', 'PENDIENTE', NULL);
 
--- Caso C5: Borrador sobre Producto 4 sin cambios (precio 63036 coincide, cantidad 3 <= stock 154, activo)
+-- Borrador C5: sobre Producto 4 sin alteraciones (precio 63036 coincide, cant 3 <= 154)
 INSERT INTO pedido_borrador (id_local, usuario, forma_pago, fecha)
 VALUES ('c5000000-0000-4000-8000-000000000005', 'operador_feria', 'EFECTIVO', '2026-11-05T19:18:00Z');
 INSERT INTO item_borrador (id_local, producto_id, cantidad, precio_centavos_visto)
@@ -54,38 +72,169 @@ VALUES ('req-uuid-c5-0001', 'c5000000-0000-4000-8000-000000000005', 'PENDIENTE',
 
 COMMIT;
 
--- =============================================================================
--- 2. En la copia del servidor (PostgreSQL) se subió el precio del Producto 1 a
---    4500.00 (450000 centavos) y se dio de baja lógica al Producto 3 (activo = false),
---    exportándose la nueva instantánea a snapshot_servidor.
---    A continuación se ejecuta el semáforo (movil/semaforo.sql) por primera vez:
---    - req-uuid-c2-0001 -> CONFLICTO
---    - req-uuid-c3-0001 -> RECHAZADO (stock insuficiente)
---    - req-uuid-c4-0001 -> RECHAZADO (baja lógica)
---    - req-uuid-c5-0001 -> SIMULADO_APROBADO
--- =============================================================================
+-- -----------------------------------------------------------------------------
+-- PASO 3: Simulación de cambios en el servidor central (descarga de nuevo snapshot)
+-- En PostgreSQL se actualizó el Producto 1 a $4500 (450000 centavos) y se dio de
+-- baja lógica el Producto 3 (activo = false). Se actualiza snapshot_servidor:
+-- -----------------------------------------------------------------------------
+UPDATE snapshot_servidor 
+SET precio_centavos = 450000, fecha_copia = '2026-11-05 18:00:00' 
+WHERE id = 1;
 
--- =============================================================================
--- 3. Resolución de C2 (el cliente acepta el nuevo precio 450000):
---    Se actualiza precio_centavos_visto en item_borrador y se encola una
---    solicitud nueva (req-uuid-c2-0002), que al correr el semáforo da SIMULADO_APROBADO.
--- =============================================================================
--- UPDATE item_borrador SET precio_centavos_visto = 450000
--- WHERE id_local = 'c2000000-0000-4000-8000-000000000002' AND producto_id = 1;
--- INSERT INTO cola_sync (solicitud_uuid, id_local, estado, motivo)
--- VALUES ('req-uuid-c2-0002', 'c2000000-0000-4000-8000-000000000002', 'PENDIENTE', NULL);
+UPDATE snapshot_servidor 
+SET disponible = 'f', eliminado = 't', fecha_copia = '2026-11-05 18:00:00' 
+WHERE id = 3;
 
--- =============================================================================
--- 4. Caso C4 (Recarga del catálogo desde snapshot_servidor):
---    Al recargar producto_cache con la nueva instantánea, la fila del Producto 3
---    queda almacenada en producto_cache con eliminado = 1 y disponible = 0 (lápida),
---    por lo que ya no aparece en la consulta del catálogo disponible (C1).
--- =============================================================================
+-- -----------------------------------------------------------------------------
+-- PASO 4: Primera corrida del semáforo sobre solicitudes PENDIENTE
+-- -----------------------------------------------------------------------------
+WITH evaluacion AS (
+    SELECT
+        cs.solicitud_uuid,
+        CASE
+            WHEN SUM(
+                CASE
+                    WHEN s.id IS NULL
+                      OR s.disponible IN ('f', 'false', '0', 0)
+                      OR s.eliminado  IN ('t', 'true',  '1', 1)
+                      OR i.cantidad > CAST(s.stock AS INTEGER)
+                    THEN 1 ELSE 0
+                END
+            ) > 0 THEN 'RECHAZADO'
+            WHEN SUM(
+                CASE
+                    WHEN i.precio_centavos_visto <> CAST(s.precio_centavos AS INTEGER)
+                    THEN 1 ELSE 0
+                END
+            ) > 0 THEN 'CONFLICTO'
+            ELSE 'SIMULADO_APROBADO'
+        END AS nuevo_estado,
+        CASE
+            WHEN SUM(CASE WHEN s.id IS NULL THEN 1 ELSE 0 END) > 0
+                THEN 'RECHAZADO: Producto inexistente en el servidor'
+            WHEN SUM(CASE WHEN s.eliminado IN ('t', 'true', '1', 1) THEN 1 ELSE 0 END) > 0
+                THEN 'RECHAZADO: Producto dado de baja lógica (eliminado)'
+            WHEN SUM(CASE WHEN s.disponible IN ('f', 'false', '0', 0) THEN 1 ELSE 0 END) > 0
+                THEN 'RECHAZADO: Producto no disponible en catálogo'
+            WHEN SUM(CASE WHEN i.cantidad > CAST(s.stock AS INTEGER) THEN 1 ELSE 0 END) > 0
+                THEN 'RECHAZADO: Stock insuficiente en el servidor para la cantidad solicitada'
+            WHEN SUM(CASE WHEN i.precio_centavos_visto <> CAST(s.precio_centavos AS INTEGER) THEN 1 ELSE 0 END) > 0
+                THEN 'CONFLICTO: El precio actual en el servidor difiere del precio visto en el borrador'
+            ELSE 'OK: Precio, disponibilidad y stock verificados en la instantánea'
+        END AS nuevo_motivo
+    FROM cola_sync cs
+    JOIN item_borrador i ON i.id_local = cs.id_local
+    LEFT JOIN snapshot_servidor s ON CAST(s.id AS INTEGER) = i.producto_id
+    WHERE cs.estado = 'PENDIENTE'
+    GROUP BY cs.solicitud_uuid
+)
+UPDATE cola_sync
+SET
+    estado = (SELECT e.nuevo_estado FROM evaluacion e WHERE e.solicitud_uuid = cola_sync.solicitud_uuid),
+    motivo = (SELECT e.nuevo_motivo FROM evaluacion e WHERE e.solicitud_uuid = cola_sync.solicitud_uuid)
+WHERE estado = 'PENDIENTE'
+  AND EXISTS (SELECT 1 FROM evaluacion e WHERE e.solicitud_uuid = cola_sync.solicitud_uuid);
 
--- =============================================================================
--- 5. Caso C6 (Idempotencia: reenviar el mismo UUID y reejecutar el semáforo):
---    Intento de insertar nuevamente 'req-uuid-c5-0001' falla por UNIQUE/PRIMARY KEY,
---    y volver a correr semaforo.sql no reevalúa solicitudes que ya no están PENDIENTE.
--- =============================================================================
--- INSERT INTO cola_sync (solicitud_uuid, id_local, estado, motivo)
--- VALUES ('req-uuid-c5-0001', 'c5000000-0000-4000-8000-000000000005', 'PENDIENTE', NULL);
+-- -----------------------------------------------------------------------------
+-- PASO 5: Resolución de Caso C2 (Cliente acepta nuevo precio: 450000 centavos)
+-- Se actualiza precio_centavos_visto en el borrador y se encola nueva solicitud
+-- -----------------------------------------------------------------------------
+UPDATE item_borrador 
+SET precio_centavos_visto = 450000
+WHERE id_local = 'c2000000-0000-4000-8000-000000000002' AND producto_id = 1;
+
+INSERT INTO cola_sync (solicitud_uuid, id_local, estado, motivo)
+VALUES ('req-uuid-c2-0002', 'c2000000-0000-4000-8000-000000000002', 'PENDIENTE', NULL);
+
+-- -----------------------------------------------------------------------------
+-- PASO 6: Recarga del catálogo local en producto_cache (Preservación de lápida C4)
+-- El Producto 3 se actualiza con disponible = 0 y eliminado = 1 (lápida).
+-- No se hace DELETE para mantener la FK de borradores previos.
+-- -----------------------------------------------------------------------------
+INSERT OR REPLACE INTO producto_cache (id, nombre, precio_centavos, stock_visto, disponible, eliminado, fecha_copia)
+SELECT 
+    id, 
+    nombre, 
+    precio_centavos, 
+    stock, 
+    CASE WHEN disponible IN ('t', 'true', '1') THEN 1 ELSE 0 END,
+    CASE WHEN eliminado IN ('t', 'true', '1') THEN 1 ELSE 0 END,
+    fecha_copia
+FROM snapshot_servidor;
+
+-- -----------------------------------------------------------------------------
+-- PASO 7: Segunda corrida del semáforo para resolver req-uuid-c2-0002
+-- -----------------------------------------------------------------------------
+WITH evaluacion AS (
+    SELECT
+        cs.solicitud_uuid,
+        CASE
+            WHEN SUM(
+                CASE
+                    WHEN s.id IS NULL
+                      OR s.disponible IN ('f', 'false', '0', 0)
+                      OR s.eliminado  IN ('t', 'true',  '1', 1)
+                      OR i.cantidad > CAST(s.stock AS INTEGER)
+                    THEN 1 ELSE 0
+                END
+            ) > 0 THEN 'RECHAZADO'
+            WHEN SUM(
+                CASE
+                    WHEN i.precio_centavos_visto <> CAST(s.precio_centavos AS INTEGER)
+                    THEN 1 ELSE 0
+                END
+            ) > 0 THEN 'CONFLICTO'
+            ELSE 'SIMULADO_APROBADO'
+        END AS nuevo_estado,
+        CASE
+            WHEN SUM(CASE WHEN s.id IS NULL THEN 1 ELSE 0 END) > 0
+                THEN 'RECHAZADO: Producto inexistente en el servidor'
+            WHEN SUM(CASE WHEN s.eliminado IN ('t', 'true', '1', 1) THEN 1 ELSE 0 END) > 0
+                THEN 'RECHAZADO: Producto dado de baja lógica (eliminado)'
+            WHEN SUM(CASE WHEN s.disponible IN ('f', 'false', '0', 0) THEN 1 ELSE 0 END) > 0
+                THEN 'RECHAZADO: Producto no disponible en catálogo'
+            WHEN SUM(CASE WHEN i.cantidad > CAST(s.stock AS INTEGER) THEN 1 ELSE 0 END) > 0
+                THEN 'RECHAZADO: Stock insuficiente en el servidor para la cantidad solicitada'
+            WHEN SUM(CASE WHEN i.precio_centavos_visto <> CAST(s.precio_centavos AS INTEGER) THEN 1 ELSE 0 END) > 0
+                THEN 'CONFLICTO: El precio actual en el servidor difiere del precio visto en el borrador'
+            ELSE 'OK: Precio, disponibilidad y stock verificados en la instantánea'
+        END AS nuevo_motivo
+    FROM cola_sync cs
+    JOIN item_borrador i ON i.id_local = cs.id_local
+    LEFT JOIN snapshot_servidor s ON CAST(s.id AS INTEGER) = i.producto_id
+    WHERE cs.estado = 'PENDIENTE'
+    GROUP BY cs.solicitud_uuid
+)
+UPDATE cola_sync
+SET
+    estado = (SELECT e.nuevo_estado FROM evaluacion e WHERE e.solicitud_uuid = cola_sync.solicitud_uuid),
+    motivo = (SELECT e.nuevo_motivo FROM evaluacion e WHERE e.solicitud_uuid = cola_sync.solicitud_uuid)
+WHERE estado = 'PENDIENTE'
+  AND EXISTS (SELECT 1 FROM evaluacion e WHERE e.solicitud_uuid = cola_sync.solicitud_uuid);
+
+-- -----------------------------------------------------------------------------
+-- PASO 8: Caso C6 — Demostración de Idempotencia y Protección ante Reintentos
+-- Intentar reinsertar una solicitud ya existente ('req-uuid-c5-0001') es ignorado
+-- o rechazado por PRIMARY KEY, garantizando que el semáforo no reevalúe registros cerrados.
+-- -----------------------------------------------------------------------------
+INSERT OR IGNORE INTO cola_sync (solicitud_uuid, id_local, estado, motivo)
+VALUES ('req-uuid-c5-0001', 'c5000000-0000-4000-8000-000000000005', 'PENDIENTE', NULL);
+
+-- -----------------------------------------------------------------------------
+-- CONSULTAS FINALES DE VERIFICACIÓN EN SQLITE
+-- -----------------------------------------------------------------------------
+-- 1. Estado final de todas las solicitudes en cola_sync:
+SELECT solicitud_uuid, estado, motivo 
+FROM cola_sync 
+ORDER BY solicitud_uuid;
+
+-- 2. Verificación de la lápida en producto_cache (Producto 3 eliminado pero presente):
+SELECT id, nombre, precio_centavos, stock_visto, disponible, eliminado 
+FROM producto_cache 
+WHERE id = 3;
+
+-- 3. Catálogo activo visible para nuevas ventas (el Producto 3 no aparece):
+SELECT id, nombre, precio_centavos, stock_visto 
+FROM producto_cache 
+WHERE disponible = 1 AND eliminado = 0 
+ORDER BY id;

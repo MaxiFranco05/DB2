@@ -23,6 +23,43 @@ El informe técnico unificado que acredita el cumplimiento de los **14 objetivos
 
 ---
 
+## 🎤 Guión de Defensa Oral (Presentación ante la Cátedra)
+
+| Rol / Integrante | Eje Temático a Defender | Conceptos Clave y Respuestas a Preguntas Típicas |
+| :--- | :--- | :--- |
+| **Máximo Franco** | **Arquitectura Global y Ecosistema Multi-Motor** | • Explica la coexistencia de los tres motores y la separación de responsabilidades.<br>• Defiende la regla de oro: *"El móvil propone, el servidor dispone"*.<br>• Justifica la refactorización a FNBC en logística (U4) para eliminar anomalías de actualización de responsables de depósito, y la desnormalización controlada con triggers. |
+| **Andrés Novello** | **Seguridad, Mantenimiento y Recuperación ante Desastres** | • Defiende el esquema RBAC de 6 roles bajo mínimo privilegio (U5) y cómo se contuvo el simulacro de acceso indebido de `app_web` (`GRANT` y `DROP TABLE` denegados).<br>• Expone el simulacro de desastre (U6): **RTO medido de 6,95 segundos** (frente a SLA < 300 s) y RPO de 332 s con 100% de paridad.<br>• Explica por qué se descartó `VACUUM FULL` (bloqueo exclusivo) en favor de `VACUUM ANALYZE`. |
+| **Octavio Fiore** | **Persistencia Móvil (SQLite) y Almacén NoSQL (MongoDB)** | • Demuestra la base de la tablet (U8): modo `STRICT`, dinero en centavos enteros (`INTEGER`) para evitar redondeos IEEE 754, y el snapshot con `fecha_copia`.<br>• Explica el orden del semáforo: **Rechazo (stock/baja lógica) > Conflicto de precio (C2) > Aprobado**.<br>• Defiende el modelo documental en MongoDB (U7): importes en `Decimal128` (`NumberDecimal`), validador `$jsonSchema` e inmutabilidad de precios embebidos. |
+
+---
+
+## 🛠️ Guía de Reproducción de la Tablet desde Cero (Paso a Paso)
+
+Para reproducir la capa móvil desconectada de forma autónoma en una terminal:
+
+```bash
+# 1. Exportar la instantánea desde PostgreSQL con fecha_copia
+psql -d foodstore -f movil/10_snapshot_catalogo.sql
+
+# 2. Inicializar la base SQLite en modo STRICT con sus 5 tablas
+sqlite3 movil/foodstore_movil.db < movil/schema_sqlite.sql
+
+# 3. Importar el CSV hacia snapshot_servidor y poblar producto_cache
+sqlite3 movil/foodstore_movil.db <<EOF
+.mode csv
+.import movil/servidor_snapshot.csv snapshot_servidor
+EOF
+sqlite3 movil/foodstore_movil.db < movil/import_snapshot.sql
+
+# 4. Ejecutar la batería de simulación completa (C2 a C6) de forma 100% automatizada
+sqlite3 movil/foodstore_movil.db < movil/casos_simulacion.sql
+
+# 5. Comprobar el aislamiento en PostgreSQL (0 pedidos nuevos creados en central)
+psql -d foodstore -f postgresql/consulta_final.sql
+```
+
+---
+
 ## 🏛️ Ecosistema Multi-Motor y Fuentes de Verdad
 
 1. **PostgreSQL 16+ (`DB2` - Repositorio Principal):**
@@ -30,51 +67,9 @@ El informe técnico unificado que acredita el cumplimiento de los **14 objetivos
    * **Scripts:** Carpeta `/sql` (esquema, restricciones, triggers de integridad, roles, vistas materializadas y planes de mantenimiento).
 
 2. **MongoDB 7+ (`DB2-NoSQL`):**
-   * **Almacén Documental Histórico:** Colección desnormalizada de pedidos con embedding completo de ítems para lectura rápida sin `JOIN`s.
+   * **Almacén Documental Histórico:** Colección desnormalizada de pedidos con embedding completo de ítems, importes en `Decimal128` y validador `$jsonSchema`.
    * **Repositorio:** [github.com/MaxiFranco05/DB2-NoSQL](https://github.com/MaxiFranco05/DB2-NoSQL)
 
 3. **SQLite 3.37+ (`DB2-NoSQL/food-store`):**
    * **Capa Móvil Offline:** Base de datos embebida con modo `STRICT` y dinero en centavos enteros para food trucks y ferias.
-   * Regla de Oro: *"El móvil propone, el servidor dispone"* (0 ventas automáticas en PostgreSQL sin sincronización formal).
    * **Repositorio:** [github.com/MaxiFranco05/DB2-NoSQL/tree/main/food-store](https://github.com/MaxiFranco05/DB2-NoSQL/tree/main/food-store)
-
----
-
-## 📁 Estructura del Proyecto
-
-```text
-FoodStore/
-├── sql/                     # Scripts SQL canónicos (esquema, restricciones, roles, auditoría)
-├── db/                      # Pruebas y backups
-├── docs/                    # Informes técnicos de cada unidad, DUIA y bitácoras
-│   ├── informe_tecnico_segunda_entrega.pdf   # Informe integrador oficial (Unidades 4 a 8)
-│   ├── informe_u6.pdf                        # Informe post-incidente y RTO de la Unidad 6
-│   └── informe_u7.pdf                        # Informe técnico de modelado NoSQL (Unidad 7)
-├── movil/                   # Copia local de scripts SQLite y snapshot
-├── .env.example             # Variables de entorno template (sin credenciales)
-└── .kiro/                   # Especificaciones de ingeniería dirigida por especificaciones (SDD)
-```
-
----
-
-## 🚀 Despliegue y Base de Datos (PostgreSQL)
-
-```bash
-# Copiar variables de entorno
-cp .env.example .env
-
-# Aplicar esquema base
-psql -d foodstore -f sql/schema.sql
-
-# Aplicar restricciones y triggers de integridad
-psql -d foodstore -f sql/restricciones.sql
-
-# Aplicar roles y permisos (RBAC)
-psql -d foodstore -f sql/roles.sql
-
-# Backup
-pg_dump -Fc -d foodstore > db/backups/backup_$(date +%Y%m%d).dump
-
-# Restore
-pg_restore -d foodstore db/backups/backup_YYYYMMDD.dump
-```

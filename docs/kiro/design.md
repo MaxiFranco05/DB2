@@ -1,176 +1,114 @@
 ﻿# Design — TP8: Arquitectura del Semáforo de Sincronización
-## Food Store | Bases de Datos II
 
-**Fecha:** 5 de Noviembre de 2026
+**Food Store | Bases de Datos II**  
+**Comisión:** C3 · Prof. Sergio Neira  
+**Equipo:** Máximo Franco, Andrés Novello y Octavio Fiore  
 
 ---
 
-## 1. Regla de oro: fuentes de verdad separadas
+## 1. Regla de Oro: Separación de Fuentes de Verdad
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
-│                   TABLET (SQLite — offline)                  │
+│                 TABLET (SQLite 3.37+ STRICT)                │
 │                                                             │
-│  producto_cache  ←── snapshot del catálogo del servidor     │
-│  pedido_borrador ←── cabecera del pedido local              │
-│  item_borrador   ←── líneas del pedido local                │
-│  cola_sync       ←── fila pendiente de resolución           │
+│  snapshot_servidor ─── Staging de instantánea descargada    │
+│  producto_cache    ─── Catálogo local con dinero en centavos│
+│  pedido_borrador   ─── Cabecera del pedido local            │
+│  item_borrador     ─── Líneas con precio_centavos_visto     │
+│  cola_sync         ─── Fila pendiente y evaluada            │
 │                                                             │
-│  Rol: SOLO CONSULTA Y ARMADO DE BORRADORES                  │
-│  No descuenta stock. No confirma precios. No registra ventas│
-└─────────────────────┬───────────────────────────────────────┘
-                      │  conexión (cuando hay red)
-                      ▼
+│  Rol: CONSULTA OFFLINE Y ARMADO DE BORRADORES               │
+│  No descuenta stock. No confirma ventas en central.         │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ Conexión y sincronización
+                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│               SERVIDOR (PostgreSQL — fuente de verdad)       │
+│            SERVIDOR CENTRAL (PostgreSQL 16+)                │
 │                                                             │
-│  producto    ←── precios y stock reales                     │
-│  pedido      ←── pedidos confirmados                        │
-│  detalle_pedido ← líneas confirmadas                        │
+│  producto       ─── Precios oficiales y stock real          │
+│  pedido         ─── Pedidos firmes confirmados              │
+│  detalle_pedido ─── Líneas de detalle facturadas            │
+│  v_snapshot_movil ── Catálogo con fecha_copia para exportar │
 │                                                             │
-│  Rol: ÚNICA AUTORIDAD que decide si un pedido es válido     │
-│  Descuenta stock. Congela precio. Registra la venta.        │
+│  Rol: ÚNICA AUTORIDAD Y FUENTE DE VERDAD                    │
+│  Descuenta stock. Confirma ventas. Cobra.                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Consecuencia directa:** la tablet nunca decide si un pedido "puede hacerse". Construye un borrador basado en su caché local y luego envía ese borrador al semáforo, que lo compara contra el estado actual del servidor. El resultado es siempre una decisión del servidor.
+**Consecuencia directa:** La tablet jamás modifica stock ni confirma ventas por sí misma. El estado `SIMULADO_APROBADO` en SQLite indica prefactibilidad técnica, pero solo PostgreSQL es la autoridad final.
 
 ---
 
-## 2. Modelo de datos SQLite
+## 2. Modelo de Datos SQLite (Modo STRICT y Centavos Enteros)
 
-### 2.1 `producto_cache`
-
-Copia local del catálogo descargada del servidor. Se actualiza al reconectar.
+Para eliminar imprecisiones por aritmética de coma flotante binaria (IEEE 754), se eliminó el tipo `REAL` y se forzó `INTEGER` en centavos (`precio * 100`).
 
 ```sql
-CREATE TABLE producto_cache (
-    id              INTEGER PRIMARY KEY,  -- mismo id que producto.id en PostgreSQL
+PRAGMA foreign_keys = ON;
+
+-- 1. Tabla staging para la instantánea exportada
+CREATE TABLE snapshot_servidor (
+    id              INTEGER PRIMARY KEY,
     nombre          TEXT    NOT NULL,
-    precio          REAL    NOT NULL,     -- precio al momento del último sync
+    precio_centavos INTEGER NOT NULL CHECK (precio_centavos >= 0),
     stock           INTEGER NOT NULL,
-    activo          INTEGER NOT NULL DEFAULT 1,  -- 1 = activo, 0 = baja lógica
-    ultima_sync     TEXT    NOT NULL      -- ISO-8601: cuándo se descargó este snapshot
-);
-```
+    disponible      TEXT    NOT NULL,
+    eliminado       TEXT    NOT NULL,
+    fecha_copia     TEXT    NOT NULL
+) STRICT;
 
-### 2.2 `pedido_borrador`
+-- 2. Caché de catálogo local en la tablet
+CREATE TABLE producto_cache (
+    id              INTEGER PRIMARY KEY,
+    nombre          TEXT    NOT NULL,
+    precio_centavos INTEGER NOT NULL CHECK (precio_centavos >= 0),
+    stock_visto     INTEGER NOT NULL CHECK (stock_visto >= 0),
+    disponible      INTEGER NOT NULL DEFAULT 1 CHECK (disponible IN (0, 1)),
+    eliminado       INTEGER NOT NULL DEFAULT 0 CHECK (eliminado IN (0, 1)),
+    fecha_copia     TEXT    NOT NULL
+) STRICT;
 
-Cabecera del pedido construido offline. Una fila por borrador pendiente.
-
-```sql
+-- 3. Pedidos borradores locales
 CREATE TABLE pedido_borrador (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    usuario_id      INTEGER NOT NULL,     -- id del operador/cliente local
-    creado_en       TEXT    NOT NULL,     -- ISO-8601
-    forma_pago      TEXT    NOT NULL      -- 'EFECTIVO' | 'TARJETA' | 'TRANSFERENCIA'
-);
-```
+    id_local   TEXT PRIMARY KEY,
+    usuario    TEXT NOT NULL,
+    forma_pago TEXT NOT NULL CHECK (forma_pago IN ('EFECTIVO', 'TARJETA', 'TRANSFERENCIA')),
+    fecha      TEXT NOT NULL
+) STRICT;
 
-### 2.3 `item_borrador`
-
-Líneas del borrador. Guarda el precio visto al momento de armar el pedido.
-
-```sql
+-- 4. Ítems del borrador con precio congelado en centavos
 CREATE TABLE item_borrador (
-    borrador_id     INTEGER NOT NULL REFERENCES pedido_borrador(id),
-    producto_id     INTEGER NOT NULL REFERENCES producto_cache(id),
-    cantidad        INTEGER NOT NULL CHECK (cantidad > 0),
-    precio_visto    REAL    NOT NULL,     -- precio del snapshot al armar el borrador
-    PRIMARY KEY (borrador_id, producto_id)
-);
-```
+    id_local              TEXT    NOT NULL REFERENCES pedido_borrador(id_local) ON DELETE CASCADE,
+    producto_id           INTEGER NOT NULL REFERENCES producto_cache(id),
+    cantidad              INTEGER NOT NULL CHECK (cantidad > 0),
+    precio_centavos_visto INTEGER NOT NULL CHECK (precio_centavos_visto >= 0),
+    PRIMARY KEY (id_local, producto_id)
+) STRICT;
 
-### 2.4 `cola_sync`
-
-Fila de sincronización. Registra el resultado de la evaluación del semáforo.
-
-```sql
+-- 5. Cola de sincronización local
 CREATE TABLE cola_sync (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    borrador_id     INTEGER NOT NULL REFERENCES pedido_borrador(id),
-    estado          TEXT    NOT NULL DEFAULT 'PENDIENTE',
-                    -- 'PENDIENTE' | 'CONFLICTO' | 'RECHAZADO' | 'SIMULADO_APROBADO'
-    detalle_rechazo TEXT,                -- JSON con razón del rechazo o conflicto
-    aprobado_en     TEXT,                -- ISO-8601; solo si estado = 'SIMULADO_APROBADO'
-    evaluado_en     TEXT                 -- ISO-8601; marca de la última evaluación
-);
+    solicitud_uuid TEXT PRIMARY KEY,
+    id_local       TEXT NOT NULL REFERENCES pedido_borrador(id_local) ON DELETE CASCADE,
+    estado         TEXT NOT NULL DEFAULT 'PENDIENTE' CHECK (estado IN ('PENDIENTE', 'CONFLICTO', 'RECHAZADO', 'SIMULADO_APROBADO')),
+    motivo         TEXT
+) STRICT;
 ```
 
 ---
 
-## 3. Lógica del semáforo
+## 3. Lógica Jerárquica del Semáforo
 
-El semáforo es la función central del sistema. Recibe un `borrador_id`, consulta el estado actual del servidor PostgreSQL y recorre cada ítem evaluando tres condiciones en orden estricto:
-
-```
-Para cada item en item_borrador donde borrador_id = X:
-
-  1. ¿precio_visto ≠ producto.precio (servidor)?
-        → estado = CONFLICTO
-        → guardar { "producto_id": N, "precio_visto": P1, "precio_actual": P2 }
-        → cortar evaluación del ítem
-
-  2. ¿producto.activo = FALSE (servidor)?
-        → estado = RECHAZADO
-        → guardar { "producto_id": N, "razon": "PRODUCTO_INACTIVO" }
-        → cortar evaluación del ítem
-
-  3. ¿item.cantidad > producto.stock (servidor)?
-        → estado = RECHAZADO
-        → guardar { "producto_id": N, "razon": "STOCK_INSUFICIENTE",
-                    "stock_disponible": S }
-        → cortar evaluación del ítem
-
-Si ningún ítem disparó CONFLICTO ni RECHAZADO:
-  → estado = SIMULADO_APROBADO
-  → registrar aprobado_en = now()
-```
-
-**Orden de evaluación:** conflicto de precio → baja lógica → stock insuficiente. Este orden garantiza que el operador vea primero el problema más crítico (precio incorrecto) antes de enterarse de problemas de stock.
-
----
-
-## 4. Casos de prueba formales
-
-| ID | Escenario | Condición en servidor | Estado esperado |
-|----|-----------|----------------------|-----------------|
-| C2 | Precio cambió tras armar borrador | `precio_visto ≠ producto.precio` | `CONFLICTO` |
-| C3 | Stock insuficiente al sincronizar | `item.cantidad > producto.stock` | `RECHAZADO` |
-| C4 | Producto dado de baja lógica | `producto.activo = FALSE` | `RECHAZADO` |
-| C5 | Borrador íntegramente válido | precio ✓ + stock ✓ + activo ✓ | `SIMULADO_APROBADO` |
-
----
-
-## 5. Flujo de sincronización
+El semáforo evalúa cada solicitud en estado `PENDIENTE` contra `snapshot_servidor` siguiendo un orden estricto de prioridades:
 
 ```
-Tablet (offline)                           Servidor (PostgreSQL)
-─────────────────                          ─────────────────────
-1. Operador arma borrador
-   (usa producto_cache)
-2. Guarda item_borrador
-   con precio_visto
-3. Inserta cola_sync
-   estado = PENDIENTE
-                        ── reconexión ──►
-                                          4. Semáforo lee borrador
-                                          5. Consulta producto.precio
-                                             producto.stock
-                                             producto.activo
-                                          6. Evalúa REQ-01 → REQ-04
-                                          7. Actualiza cola_sync.estado
-                        ◄── respuesta ───
-8. Tablet muestra resultado
-   al operador
+Para cada ítem en item_borrador de la solicitud:
+ 1. ¿El producto no existe, está inactivo (eliminado = 't') o no disponible?
+    → RECHAZADO (Prioridad 1)
+ 2. ¿La cantidad solicitada supera el stock disponible en snapshot_servidor?
+    → RECHAZADO (Prioridad 1)
+ 3. ¿El precio_centavos_visto difiere del precio_centavos en el servidor?
+    → CONFLICTO (Prioridad 2)
+ 4. Si ningún ítem generó RECHAZADO ni CONFLICTO:
+    → SIMULADO_APROBADO (Prioridad 3)
 ```
-
----
-
-## 6. Archivos relacionados
-
-| Archivo | Descripción |
-|---------|-------------|
-| `sql/schema.sql` | Esquema PostgreSQL canónico (tablas, triggers, índices) |
-| `docs/kiro/requirements.md` | Requisitos funcionales REQ-01 a REQ-04 |
-| `docs/kiro/tasks.md` | Lista de tareas de implementación |
